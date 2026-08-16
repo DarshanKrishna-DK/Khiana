@@ -20,6 +20,35 @@ import { CONFIG } from '../config.js';
 
 const { PROVIDER, MODEL, BASE_URL, JSON_MODE } = CONFIG.AGENT;
 
+/**
+ * Live call telemetry.
+ *
+ * Exists so the claim "the advisors are really calling an LLM" can be checked
+ * rather than believed. A judge should be able to watch the call count climb
+ * and the round-trip latency move while the game runs; a canned script cannot
+ * fake a latency distribution.
+ */
+export const llmStats = {
+  calls: 0,
+  failures: 0,
+  totalMs: 0,
+  lastMs: null,
+  lastAt: null,
+  lastModel: null,
+  recent: [],          // rolling window of the last few calls
+};
+
+function recordCall(ms, ok, kind) {
+  llmStats.calls++;
+  if (!ok) llmStats.failures++;
+  llmStats.totalMs += ms;
+  llmStats.lastMs = ms;
+  llmStats.lastAt = new Date().toISOString();
+  llmStats.lastModel = MODEL;
+  llmStats.recent.unshift({ ms, ok, kind, at: llmStats.lastAt });
+  if (llmStats.recent.length > 12) llmStats.recent.pop();
+}
+
 function apiKey() {
   return PROVIDER === 'anthropic'
     ? process.env.ANTHROPIC_API_KEY
@@ -32,6 +61,13 @@ export function providerStatus() {
     model: MODEL,
     keyPresent: Boolean(apiKey()),
     mock: CONFIG.MOCK_LLM,
+    baseUrl: BASE_URL,
+    calls: llmStats.calls,
+    failures: llmStats.failures,
+    avgMs: llmStats.calls ? Math.round(llmStats.totalMs / llmStats.calls) : null,
+    lastMs: llmStats.lastMs,
+    lastAt: llmStats.lastAt,
+    recent: llmStats.recent,
   };
 }
 
@@ -53,11 +89,17 @@ export async function callModel({ system, user, maxTokens = 300, timeoutMs = 800
   // rate-limit pressure for responses nobody will ever read.
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
+  const t0 = Date.now();
 
   try {
-    return PROVIDER === 'anthropic'
+    const out = PROVIDER === 'anthropic'
       ? await callAnthropic({ key, system, user, maxTokens, signal: ac.signal })
       : await callOpenAICompatible({ key, system, user, maxTokens, json, signal: ac.signal });
+    recordCall(Date.now() - t0, true, json ? 'decision' : 'briefing');
+    return out;
+  } catch (err) {
+    recordCall(Date.now() - t0, false, json ? 'decision' : 'briefing');
+    throw err;
   } finally {
     clearTimeout(timer);
   }

@@ -3,23 +3,46 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Khiana — your advisor is lying to you</title>
+<title>Khiana · your advisor is lying to you</title>
 <meta name="description" content="A maze you can barely see. An AI advisor who can see everything. It may have been paid to walk you into a wall." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Bricolage Grotesque: wonky enough to read as goofy, tight enough to read
-     as threatening. Paired with the game's existing IBM Plex Mono so the
-     landing and the HUD are obviously the same product. -->
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Pirata One: gothic and genuinely ominous without tipping into the
+     cartoon-horror fonts (Creepster, Nosifer) that read as a Halloween party
+     flyer. Roboto Mono is Monad's own brand mono, so the UI layer stays
+     on-brand while the display layer carries the dread. -->
+<link href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Roboto+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#0E091C">
 <style>
-  /* Tokens lifted from play.html so the two pages cannot drift. */
   :root {
-    --ink:#0B0E14; --panel:#131823; --fog:#1C2230; --edge:#2A3244;
-    --bone:#E8E3D9; --muted:#7A8499; --amber:#E5A93C; --rust:#C2503A;
-    --violet:#7B6CD9; --teal:#5FA8A0;
-    --mono:'IBM Plex Mono',ui-monospace,monospace;
-    --display:'Bricolage Grotesque',system-ui,sans-serif;
-    --r:14px;
+    /* Monad brand palette, taken from monad.xyz/brand-and-media-kit rather
+       than from memory. The logo's chrome already sits on Monad Cyan, so the
+       two identities line up without either being bent to fit. */
+    --ink:#0E091C;        /* Monad Dark Navy */
+    --void:#07040F;
+    --panel:#150E2B;
+    --fog:#1E1440;
+    --edge:#2C1F5C;
+    --purple:#6E54FF;     /* Monad Purple   */
+    --lavender:#DDD7FE;   /* Monad Lavender */
+    --cyan:#85E6FF;       /* Monad Cyan     */
+    --sky:#B9E3F9;        /* Monad Sky Blue */
+    --pink:#FF8EE4;       /* Monad Pink     */
+    --orange:#FFAE45;     /* Monad Orange   */
+
+    --bone:var(--lavender);
+    --muted:#8778BE;
+    --amber:var(--cyan);
+    --rust:var(--pink);
+    --violet:var(--purple);
+    --teal:var(--cyan);
+
+    --mono:'Roboto Mono',ui-monospace,monospace;
+    --display:'Pirata One',system-ui,serif;
+    --r:4px;              /* sharp: a maze has corners, not curves */
     --page:min(1240px,100% - 2.5rem);
   }
   * { box-sizing:border-box; }
@@ -30,8 +53,38 @@
     -webkit-font-smoothing:antialiased;
   }
   .wrap { width:var(--page); margin-inline:auto; }
-  h1,h2,h3 { font-family:var(--display); font-weight:800; letter-spacing:-0.03em; margin:0; }
+  h1,h2,h3 {
+    font-family:var(--display); font-weight:400; letter-spacing:.01em; margin:0;
+    /* Pirata One is a single-weight gothic; faking bold smears it, and its
+       natural line height clips descenders at display sizes. */
+    line-height:1.08;
+  }
   a { color:inherit; }
+
+  /**
+   * The labyrinth behind everything.
+   *
+   * A canvas running a real recursive-backtracker maze (see maze-bg.js) with
+   * a torch that follows the pointer and drifts as you scroll. The previous
+   * version was repeating-linear-gradient graph paper, which read as a
+   * spreadsheet rather than a place you could get lost in.
+   */
+  .maze {
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    /* Held well back: at full strength the wall lines run straight through
+       the body copy and the page becomes hard to read, which is a worse
+       failure than a less dramatic background. */
+    opacity:.34;
+  }
+  /* The vail: heavy vignette, per the Obsidian Labyrinth depth model. Light
+     falls off fast, so the page edges are genuinely dark. */
+  .vail {
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    background:
+      radial-gradient(120% 90% at 50% 40%, rgba(7,4,15,.35) 0%, rgba(7,4,15,.78) 55%, #07040F 100%),
+      linear-gradient(180deg, rgba(14,9,28,.55) 0%, transparent 22%);
+  }
+  body > *:not(.maze):not(.grain):not(.vail) { position:relative; z-index:2; }
 
   /* Grain. Fixed and pointer-events-none so it never repaints on scroll. */
   .grain {
@@ -39,16 +92,50 @@
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
   }
 
+  /**
+   * Obsidian Labyrinth component language.
+   *
+   * Zero radius throughout, with 45-degree chamfers instead of rounding, and
+   * 1px hash marks in panel corners. The chamfer is what stops a sharp-corner
+   * design from reading as "unstyled div" — it is a deliberate cut, and it
+   * echoes the maze's own right angles.
+   */
+  .chamfer {
+    clip-path:polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  }
+  .marked { position:relative; }
+  .marked::before, .marked::after {
+    content:''; position:absolute; width:9px; height:9px; pointer-events:none;
+    border-color:var(--cyan); opacity:.5;
+  }
+  .marked::before { top:-1px; left:-1px; border-top:1px solid; border-left:1px solid; }
+  .marked::after  { bottom:-1px; right:-1px; border-bottom:1px solid; border-right:1px solid; }
+
+  /* Corridor wire: sections are connected, not merely stacked. */
+  .wire { position:relative; }
+  .wire::before {
+    content:''; position:absolute; top:0; left:50%; width:1px; height:44px;
+    transform:translate(-50%,-100%);
+    background:linear-gradient(180deg, transparent, var(--purple));
+    opacity:.55;
+  }
+
   /* ── Nav ───────────────────────────────────────────────────────────── */
   nav {
     position:sticky; top:0; z-index:50; height:68px;
     display:flex; align-items:center; gap:28px;
-    background:rgba(11,14,20,.86); backdrop-filter:blur(14px);
+    background:rgba(14,9,28,.88); backdrop-filter:blur(14px);
     border-bottom:1px solid var(--edge);
   }
   nav .wrap { display:flex; align-items:center; gap:28px; width:var(--page); }
-  .mark { font-family:var(--display); font-weight:800; font-size:19px; letter-spacing:-.04em; }
-  .mark i { color:var(--rust); font-style:normal; }
+  .mark { display:flex; align-items:center; text-decoration:none; }
+  .mark img {
+    height:34px; width:auto; display:block;
+    /* Neutral elevation, not a coloured halo: the chrome in the logo already
+       supplies the colour, and a purple glow behind it is the AI-UI signature
+       the design hook (correctly) flags. */
+    filter:drop-shadow(0 2px 5px rgba(0,0,0,.65));
+  }
   nav .links { display:flex; gap:22px; margin-left:auto; font-size:12.5px; color:var(--muted); }
   nav .links a { text-decoration:none; }
   nav .links a:hover { color:var(--bone); }
@@ -62,10 +149,10 @@
     transition:transform .12s cubic-bezier(.16,1,.3,1), background .2s, border-color .2s;
   }
   .btn:active { transform:translateY(1px) scale(.985); }
-  .btn-primary { background:var(--amber); color:#241704; }
-  .btn-primary:hover { background:#F0B851; }
+  .btn-primary { background:var(--amber); color:#0E091C; }
+  .btn-primary:hover { background:#A8EFFF; }
   .btn-ghost { border-color:var(--edge); color:var(--bone); background:transparent; }
-  .btn-ghost:hover { border-color:var(--muted); background:rgba(232,227,217,.04); }
+  .btn-ghost:hover { border-color:var(--muted); background:rgba(221,215,254,.06); }
 
   /* ── Hero: asymmetric split, not centered ──────────────────────────── */
   header { padding:clamp(3rem,7vw,5.5rem) 0 clamp(3rem,6vw,4.5rem); }
@@ -93,14 +180,19 @@
     position:relative; aspect-ratio:1/1; border-radius:var(--r);
     border:1px solid var(--edge); overflow:hidden;
     background:
-      radial-gradient(120% 90% at 50% 108%, rgba(229,169,60,.30), transparent 52%),
-      repeating-linear-gradient(0deg, rgba(42,50,68,.55) 0 1px, transparent 1px 34px),
-      repeating-linear-gradient(90deg, rgba(42,50,68,.55) 0 1px, transparent 1px 34px),
+      radial-gradient(120% 90% at 50% 108%, rgba(110,84,255,.28), transparent 52%),
+      repeating-linear-gradient(0deg, rgba(44,31,92,.6) 0 1px, transparent 1px 34px),
+      repeating-linear-gradient(90deg, rgba(44,31,92,.6) 0 1px, transparent 1px 34px),
       var(--panel);
+  }
+  .viz .crest {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-58%);
+    width:66%; height:auto; z-index:2;
+    filter:drop-shadow(0 6px 22px rgba(0,0,0,.7));
   }
   .viz .you {
     position:absolute; left:50%; bottom:16%; width:15px; height:15px; margin-left:-7.5px;
-    border-radius:50%; background:var(--amber); box-shadow:0 0 26px 9px rgba(229,169,60,.42);
+    border-radius:50%; background:var(--cyan); box-shadow:0 0 26px 9px rgba(133,230,255,.34);
   }
   .viz .ghost {
     position:absolute; width:12px; height:12px; border-radius:50%;
@@ -111,7 +203,7 @@
   @keyframes lurk { 0%,100%{transform:translateY(0);opacity:.24} 50%{transform:translateY(-13px);opacity:.72} }
   .viz .whisper {
     position:absolute; left:0; right:0; bottom:0; padding:16px 18px;
-    background:linear-gradient(0deg,rgba(11,14,20,.97),transparent);
+    background:linear-gradient(0deg,rgba(14,9,28,.97),transparent);
     font-size:12.5px; color:var(--violet);
   }
   .viz .whisper b { color:var(--bone); font-weight:500; display:block; margin-top:3px; font-style:italic; }
@@ -185,7 +277,7 @@
     background:var(--ink); color:var(--bone); font-family:var(--mono); font-size:13px;
     min-width:0;
   }
-  input[type=text]::placeholder { color:#5C6577; }
+  input[type=text]::placeholder { color:#6A5C9E; }
   input[type=text]:focus { outline:2px solid var(--amber); outline-offset:1px; border-color:transparent; }
   #code { width:150px; text-transform:uppercase; letter-spacing:.18em; font-weight:600; }
   #hostname { flex:1; min-width:180px; }
@@ -217,11 +309,15 @@
 </style>
 </head>
 <body>
-<div class="grain"></div>
+<canvas class="maze" aria-hidden="true"></canvas>
+<div class="vail" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
 
 <nav>
   <div class="wrap">
-    <span class="mark">KHI<i>ANA</i></span>
+    <a class="mark" href="/" aria-label="Khiana home">
+      <img src="/khiana-logo.png" alt="Khiana" width="120" height="34" />
+    </a>
     <span class="links">
       <a href="#how">How it works</a>
       <a href="#lobbies">Lobbies</a>
@@ -243,9 +339,10 @@
       </div>
     </div>
 
-    <div class="viz" aria-hidden="true">
-      <span class="ghost"></span><span class="ghost"></span>
-      <span class="you"></span>
+    <div class="viz chamfer marked">
+      <img class="crest" src="/khiana-logo.png" alt="Khiana" width="483" height="401" />
+      <span class="ghost" aria-hidden="true"></span><span class="ghost" aria-hidden="true"></span>
+      <span class="you" aria-hidden="true"></span>
       <div class="whisper">
         your advisor says
         <b id="rotator">"North two, then hold. It's clear."</b>
@@ -260,11 +357,11 @@
     <p class="sub">Everyone knows who the saboteurs are from the first second. That part is public. What nobody knows is which advisors have taken money.</p>
 
     <div class="roles">
-      <div class="role loy">
+      <div class="role loy chamfer">
         <h3>Loyalists</h3>
         <p>Finish <b id="cfg-tasks">5</b> tasks, then get <b id="cfg-surv">3</b> survivors to the exit. You need each other to reach tiles you cannot reach alone, which means trusting advisors you cannot audit.</p>
       </div>
-      <div class="role sab">
+      <div class="role sab chamfer">
         <h3>Saboteurs</h3>
         <p>Cut the loyalists down, or run out the clock. Forcing someone into a wall costs 2.00. Paying their own advisor to walk them there costs about 1.00. Do the maths.</p>
       </div>
@@ -284,7 +381,7 @@
   </div>
 </section>
 
-<section class="twist">
+<section class="twist wire">
   <div class="wrap">
     <p>The audience watches every bribe land. <span class="hl">You never find out until it is over.</span></p>
     <p class="foot">Spectators see the full map and the whole advisor channel. Players see a corridor.</p>

@@ -16,7 +16,7 @@ interface IEIP3009 {
 }
 
 /**
- * @title BlindsideEscrow
+ * @title KhianaEscrow
  * @notice Conditional bribes between agents on opposing teams, funded over x402.
  *
  * This contract is the strongest justification for putting Khiana on a chain
@@ -51,7 +51,7 @@ interface IEIP3009 {
  * reneged on, reordered, or quietly erased after the fact — which is what
  * makes the end-of-game ledger reveal believable.
  */
-contract BlindsideEscrow {
+contract KhianaEscrow {
     enum Status { Open, Released, Refunded }
 
     struct Bribe {

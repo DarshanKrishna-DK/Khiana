@@ -3,17 +3,25 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>BLINDSIDE — Channel</title>
+<title>Khiana · Channel</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Roboto+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#0E091C">
 <style>
   :root {
-    --ink:#0B0E14; --panel:#131823; --fog:#1C2230; --edge:#2A3244;
-    --bone:#E8E3D9; --muted:#7A8499; --amber:#E5A93C; --rust:#C2503A;
-    --violet:#7B6CD9; --teal:#5FA8A0;
-    --mono:'IBM Plex Mono',ui-monospace,monospace;
-    --display:'Archivo',system-ui,sans-serif;
+    /* Monad brand palette (monad.xyz/brand-and-media-kit), identical to the
+       landing page and the game so all three read as one product. */
+    --ink:#0E091C; --panel:#150E2B; --fog:#1E1440; --edge:#2C1F5C;
+    --purple:#6E54FF; --lavender:#DDD7FE; --cyan:#85E6FF;
+    --pink:#FF8EE4; --orange:#FFAE45;
+    --bone:var(--lavender); --muted:#8778BE;
+    --amber:var(--cyan); --rust:var(--pink); --violet:var(--purple); --teal:var(--cyan);
+    --mono:'Roboto Mono',ui-monospace,monospace;
+    --display:'Pirata One',system-ui,serif;
   }
   * { box-sizing:border-box; }
   html,body { margin:0; height:100%; background:var(--ink); color:var(--bone);
@@ -29,9 +37,9 @@
   #hdr {
     position:absolute; top:0; left:0; right:0; z-index:5;
     display:flex; align-items:center; gap:26px; padding:16px 22px;
-    background:linear-gradient(180deg,rgba(11,14,20,.96),transparent);
+    background:linear-gradient(180deg,rgba(14,9,28,.96),transparent);
   }
-  #mark { font-family:var(--display); font-weight:800; font-size:16px; letter-spacing:.22em; }
+  #mark { font-family:var(--display); font-weight:400; font-size:16px; letter-spacing:.22em; }
   #mark span { color:var(--rust); }
   .stat { font-size:10px; letter-spacing:.14em; color:var(--muted); text-transform:uppercase; }
   .stat b { display:block; font-size:19px; color:var(--bone); font-weight:600; letter-spacing:0;
@@ -39,10 +47,19 @@
   .stat.amber b { color:var(--amber); }
 
   /* ── Treasuries: money is the story, so it gets the persistent display ── */
+  #sound {
+    margin-left:auto; align-self:center;
+    padding:7px 13px; border-radius:4px; cursor:pointer;
+    background:transparent; border:1px solid var(--edge); color:var(--muted);
+    font-family:var(--mono); font-size:10px; letter-spacing:.14em;
+  }
+  #sound:hover { border-color:var(--muted); color:var(--bone); }
+  #sound.on { border-color:var(--amber); color:var(--amber); }
+
   #treasuries {
     position:absolute; bottom:0; left:0; right:0; z-index:5;
     display:flex; gap:2px; padding:16px 22px 18px;
-    background:linear-gradient(0deg,rgba(11,14,20,.96),transparent);
+    background:linear-gradient(0deg,rgba(14,9,28,.96),transparent);
   }
   .tr { flex:1; }
   .tr .nm { font-size:10px; color:var(--muted); margin-bottom:5px;
@@ -60,7 +77,7 @@
     padding:15px 18px 12px; border-bottom:1px solid var(--edge);
   }
   #sidehd h2 {
-    font-family:var(--display); font-weight:800; font-size:12px;
+    font-family:var(--display); font-weight:400; font-size:14px;
     letter-spacing:.2em; margin:0 0 5px; color:var(--violet);
   }
   #sidehd p { margin:0; font-size:10px; color:var(--muted); line-height:1.5; }
@@ -76,7 +93,7 @@
 
   .msg.bribe .body { color:var(--amber); }
   .msg.bribe { border-left:2px solid var(--amber); padding-left:9px; }
-  .msg.settled { border-left:2px solid var(--amber); padding-left:9px; background:rgba(229,169,60,.07); padding:7px 9px; border-radius:0 3px 3px 0; }
+  .msg.settled { border-left:2px solid var(--amber); padding-left:9px; background:rgba(133,230,255,.08); padding:7px 9px; border-radius:0 3px 3px 0; }
   .msg.settled .body { color:var(--amber); font-weight:500; }
   .msg.kill { border-left:2px solid var(--rust); padding-left:9px; }
   .msg.kill .body { color:var(--rust); }
@@ -88,7 +105,7 @@
      Everything else on this screen is quiet so this can be loud.        ── */
   .msg.corrupt {
     border-left:2px solid var(--violet); padding:9px 11px;
-    background:rgba(123,108,217,.12); border-radius:0 3px 3px 0;
+    background:rgba(110,84,255,.14); border-radius:0 3px 3px 0;
   }
   .msg.corrupt .meta { color:var(--violet); }
   .msg.corrupt .body { color:var(--bone); }
@@ -118,11 +135,11 @@
 
   /* ── Reveal overlay ──────────────────────────────────────────────────── */
   #reveal {
-    position:fixed; inset:0; background:rgba(11,14,20,.985); z-index:100;
+    position:fixed; inset:0; background:rgba(14,9,28,.985); z-index:100;
     display:none; overflow-y:auto; padding:44px;
   }
   #reveal.on { display:block; }
-  #reveal h1 { font-family:var(--display); font-weight:800; font-size:38px;
+  #reveal h1 { font-family:var(--display); font-weight:400; font-size:44px;
     letter-spacing:.16em; margin:0 0 6px; }
   #reveal .sub { color:var(--muted); font-size:13px; margin-bottom:34px; }
   #reveal .row { border-top:1px solid var(--edge); padding:15px 0;
@@ -153,11 +170,12 @@
     <div id="board">
       <canvas id="cv"></canvas>
       <div id="hdr">
-        <div id="mark">BLIND<span>SIDE</span></div>
+        <img id="mark" src="/khiana-logo.png" alt="Khiana" height="30" />
         <div class="stat">TICK<b id="tick">0/40</b></div>
         <div class="stat amber">TASKS<b id="tasks">0/5</b></div>
         <div class="stat">ALIVE<b id="alive">8</b></div>
         <div class="stat amber">BRIBED<b id="bribed">0.00</b></div>
+      <button id="sound" type="button" title="Browsers block audio until you click">SOUND OFF</button>
       </div>
       <div id="treasuries"></div>
     </div>
@@ -176,7 +194,7 @@
   </div>
 
   <div id="reveal">
-    <h1 id="rvwin">—</h1>
+    <h1 id="rvwin">...</h1>
     <p class="sub" id="rvsub"></p>
     <div id="rvrows"></div>
     <div id="rolecommit" hidden></div>

@@ -10,7 +10,7 @@ import { providerStatus } from './agents/llm.js';
 import {
   createRoom, getRoom, publicRooms, roomSummary, allRooms,
   attach, detach, seatPlayer, pushState, broadcast, movePlayerIn,
-  startRoom, finishRoom, resetRoom, closeRoom, startReaper,
+  startRoom, finishRoom, resetRoom, closeRoom, startReaper, startAutoStarter, isHost, canStart, humanCount,
 } from './rooms.js';
 
 const app = express();
@@ -29,10 +29,10 @@ const wss = new WebSocketServer({ server: http });
  * code and the unprefixed routes operate on it.
  */
 const DEFAULT_CODE = 'MAIN';
-const defaultRoom = createRoom({ name: 'Main table', isPublic: true });
-defaultRoom.code = DEFAULT_CODE;
+const defaultRoom = createRoom({ name: 'Main table', isPublic: true, code: DEFAULT_CODE });
 
 startReaper();
+startAutoStarter();
 
 /** Resolve :code / ?room= / body.room, falling back to the main table. */
 function resolveRoom(req) {
@@ -85,6 +85,72 @@ app.get('/config', (_req, res) => {
     })),
     mockChain: CONFIG.MOCK_CHAIN,
     explorer: CONFIG.CHAIN.EXPLORER,
+  });
+});
+
+/**
+ * Everything a judge needs to verify the claims, in one payload.
+ *
+ * Built because "the agents really call an LLM" and "the payments really
+ * settle on Monad" are both unfalsifiable from the outside. This exposes the
+ * live counters and the contract addresses so the claims can be checked
+ * rather than taken on trust.
+ */
+app.get('/proof', (_req, res) => {
+  const g = defaultRoom.game;
+  const ledger = g.ledger?.entries ?? [];
+  const settled = ledger.filter(e => e.txHash);
+
+  res.json({
+    llm: providerStatus(),
+
+    chain: {
+      mode: CONFIG.MOCK_CHAIN ? 'MOCK' : 'LIVE',
+      chainId: CONFIG.CHAIN.CHAIN_ID,
+      explorer: CONFIG.CHAIN.EXPLORER,
+      contracts: {
+        KhianaCredit: CONFIG.CHAIN.CREDIT_ADDRESS || null,
+        KhianaEscrow: CONFIG.CHAIN.ESCROW_ADDRESS || null,
+        PowerupShop: CONFIG.CHAIN.SHOP_ADDRESS || null,
+        RoleCommit: CONFIG.CHAIN.COMMIT_ADDRESS || null,
+      },
+    },
+
+    /** Every x402 settlement this game has produced, newest first. */
+    x402: {
+      resources: ['/x402/contact', '/x402/powerup', '/x402/bribe'],
+      settlements: settled.slice(-25).reverse().map(e => ({
+        tick: e.tick, kind: e.kind, from: e.from, to: e.to, amount: e.amount,
+        txHash: e.txHash,
+        url: CONFIG.MOCK_CHAIN ? null : `${CONFIG.CHAIN.EXPLORER}/tx/${e.txHash}`,
+      })),
+      totals: {
+        contacts: ledger.filter(e => e.kind === 'CONTACT').length,
+        bribes: ledger.filter(e => e.kind === 'BRIBE').length,
+        powerups: ledger.filter(e => e.kind === 'POWERUP').length,
+      },
+    },
+
+    /** What each advisor has bought, so powerup use is visible not implied. */
+    powerups: {
+      catalogue: Object.entries(CONFIG.POWERUPS).map(([n, p]) => ({ name: n, cost: p.cost, team: p.team ?? 'BOTH' })),
+      purchased: ledger.filter(e => e.kind === 'POWERUP').map(e => ({
+        tick: e.tick, by: e.from, item: e.memo, cost: e.amount, txHash: e.txHash,
+      })),
+      activeThisTick: {
+        reveal: [...(g.effects?.reveal ?? [])],
+        lantern: [...(g.effects?.lantern ?? [])],
+        sprint: [...(g.effects?.sprint ?? [])],
+        ghost: [...(g.effects?.ghost ?? [])],
+        freeze: [...(g.effects?.freeze ?? [])],
+        jam: [...(g.effects?.jam ?? [])],
+        whisper: [...(g.effects?.whisper ?? [])],
+        blackout: Boolean(g.effects?.blackout),
+        bounties: (g.effects?.bounties ?? []).length,
+      },
+    },
+
+    game: { tick: g.tick, phase: g.phase, started: g.started, winner: g.winner },
   });
 });
 
@@ -188,6 +254,8 @@ wss.on('connection', (ws, req) => {
           type: 'JOINED',
           playerId: r.seat.id, team: r.seat.team,
           token: r.token, resumed: r.resumed, room: room.code,
+          isHost: r.isHost,
+          started: room.game.started,
         });
         pushState(room, ws);
         broadcast(room);   // the roster changed for everyone watching
@@ -210,16 +278,54 @@ wss.on('connection', (ws, req) => {
         break;
       }
 
-      // Lets whoever is in the lobby start it without a curl command.
+      /**
+       * Only the host starts the game.
+       *
+       * It used to begin the moment the tick loop was kicked, which meant a
+       * player who opened a table was thrown straight into a solo game with
+       * seven bots and no chance to share the code.
+       */
       case 'START':
-        if (!room.game.started) startRoom(room);
+        if (room.game.started) break;
+        if (!canStart(room, msg.token)) {
+          // Only reachable if the caller holds no seat in this room at all.
+          send(ws, {
+            type: 'ERROR', context: 'START',
+            error: 'Rejoin the table before starting it.',
+          });
+          break;
+        }
+        /**
+         * startRoom is async (it publishes the role commitment on chain
+         * first). Broadcasting synchronously after it sent everyone the
+         * PRE-start state, so the lobby never learned the game had begun and
+         * sat on "Starting…" until the next tick fifteen seconds later.
+         */
+        startRoom(room)
+          .then(() => broadcast(room))
+          .catch(err => send(ws, {
+            type: 'ERROR', context: 'START',
+            error: `Could not start: ${String(err?.message ?? err)}`,
+          }));
         break;
 
-      case 'MOVE':
-        if (meta?.playerId) {
-          movePlayerIn(room, meta.playerId, msg.dx | 0, msg.dy | 0);
-          pushState(room, ws);
-        }
+      case 'MOVE': {
+        if (!meta?.playerId) break;
+        const p = room.game.players[meta.playerId];
+        // A dead player is a spectator with a keyboard.
+        if (!p?.alive) break;
+        if (Number.isInteger(msg.facing)) p.facing = ((msg.facing % 4) + 4) % 4;
+        movePlayerIn(room, meta.playerId, msg.dx | 0, msg.dy | 0);
+        pushState(room, ws);
+        break;
+      }
+
+      /** Look direction only, so the advisor can say "turn left". */
+      case 'FACE': {
+        const p = room.game.players[meta?.playerId];
+        if (p && Number.isInteger(msg.facing)) p.facing = ((msg.facing % 4) + 4) % 4;
+        break;
+      }
         break;
     }
   });

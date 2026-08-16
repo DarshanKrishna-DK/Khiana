@@ -10,6 +10,8 @@
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8787';
 const SPECTATOR = import.meta.env.VITE_SPECTATOR_URL ?? 'http://localhost:5174';
 
+import { mountMazeBackground } from './maze-bg.js';
+
 const el = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -53,7 +55,7 @@ function lobbyCard(r) {
     : 'waiting to start';
 
   return `
-    <div class="lobby">
+    <div class="lobby chamfer marked">
       <div class="top">
         <span class="code">${esc(r.code)}</span>
         <span class="nm">${esc(r.name)}</span>
@@ -171,6 +173,10 @@ if (!reduce) {
 }
 
 // ── Boot ────────────────────────────────────────────────────────────────────
+
+// The labyrinth behind the page.
+const mazeCanvas = document.querySelector('canvas.maze');
+if (mazeCanvas) mountMazeBackground(mazeCanvas);
 
 loadConfig();
 loadLobbies();

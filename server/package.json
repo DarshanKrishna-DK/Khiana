@@ -1,5 +1,5 @@
 {
-  "name": "blindside-server",
+  "name": "khiana-server",
   "version": "0.1.0",
   "type": "module",
   "description": "Authoritative game server: tick engine, fog of war, agents, settlement",

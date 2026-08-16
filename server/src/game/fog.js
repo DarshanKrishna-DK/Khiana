@@ -1,5 +1,6 @@
-import { CONFIG } from '../config.js';
+import { CONFIG, TEAM } from '../config.js';
 import { distance, isWalkable } from './maze.js';
+import { bearingTo, tileDistance } from './directions.js';
 
 /**
  * SECURITY-CRITICAL MODULE.
@@ -168,8 +169,49 @@ export function playerView(state, playerId) {
     tasksComplete: state.tasksComplete,
     tasksToWin: CONFIG.GAME.TASKS_TO_WIN,
     briefing: me.agent.lastBriefing ?? null,
+
+    /**
+     * Where the advisor is pointing you, as a bearing rather than a
+     * coordinate. The HUD draws an arrow; the player still cannot read a grid
+     * reference, and still cannot verify the arrow is honest.
+     */
+    guide: me.agent.lastTarget ? {
+      bearing: bearingTo(me.pos, me.agent.lastTarget),
+      distance: tileDistance(me.pos, me.agent.lastTarget),
+    } : null,
+
+    /**
+     * The objective, in one line, always on screen.
+     * Playtesters could not tell what they were supposed to be doing, which
+     * is fatal for a game whose whole tension depends on knowing the stakes.
+     */
+    objective: objectiveFor(state, me),
+    started: Boolean(state.started),
     // NOTE: agent channel is deliberately absent. Players never see it.
   };
+}
+
+/**
+ * One sentence telling this player what winning looks like right now.
+ * Team-specific, phase-specific, and short enough to read at a glance.
+ */
+function objectiveFor(state, me) {
+  const done = state.tasksComplete;
+  const need = CONFIG.GAME.TASKS_TO_WIN;
+
+  if (!me.alive) return 'You are dead. Watch how it ends.';
+  if (state.winner) return `${state.winner} win.`;
+  if (!state.started) return 'Waiting for the host to start.';
+
+  if (me.team === TEAM.SABOTEUR) {
+    const loyal = Object.values(state.players).filter(p => p.alive && p.team === TEAM.LOYALIST).length;
+    return `Cut the loyalists to ${CONFIG.GAME.LOYALISTS_ALIVE_TO_LOSE} (${loyal} left), or stall the tasks past the clock.`;
+  }
+
+  if (done >= need) {
+    return `All tasks done. Get ${CONFIG.GAME.SURVIVORS_TO_ESCAPE} of you to the exit.`;
+  }
+  return `Complete ${need - done} more task${need - done === 1 ? '' : 's'}, then escape with ${CONFIG.GAME.SURVIVORS_TO_ESCAPE}.`;
 }
 
 /** Spectators see everything. This is the demo view. */

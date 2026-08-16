@@ -41,6 +41,7 @@ export function createGame({ seed = Date.now(), playerCount = CONFIG.GAME.PLAYER
       alive: true,
       isBot: true,             // flipped to false when a human claims the seat
       adjacentSince: null,
+      facing: 0,            // cardinal index, reported by the client
       trail: [spawns[i]],
       agent,
     };
@@ -163,6 +164,9 @@ export async function runTick(state, broadcast) {
   for (const { agent, actions } of results) {
     if (!actions?.briefing) continue;
     agent.lastBriefing = clampSentences(actions.briefing, CONFIG.AGENT.BRIEF_MAX_SENTENCES);
+    // Travels alongside the words: bots path to it, the client draws a
+    // compass arrow at it. The player never sees the raw numbers.
+    agent.lastTarget = actions.target ?? agent.lastTarget ?? null;
     agent.lastBriefingCorrupted = Boolean(actions.corrupted) || hasLiveCommitment(agent, state);
 
     // The dramatic-irony beat. Spectators see this flagged; the human never will.

@@ -1,4 +1,5 @@
 import { Scene } from './scene.js';
+import { unlock, sfx, speak, setPref, getPrefs, stopSpeaking, startAmbience, setTension, outputLevel, isUnlocked } from './audio.js';
 
 const WS_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8787';
 
@@ -21,16 +22,25 @@ const scene = new Scene(el('stage'));
 
 // Debug handle. Harmless in production and the only practical way to inspect
 // three.js internals from an automated browser session.
-if (typeof window !== 'undefined') window.__khiana = { scene };
+if (typeof window !== 'undefined') {
+  // Audio helpers hang off the same module instance the game uses. Importing
+  // './audio.js' separately gives a DIFFERENT instance under Vite HMR (it
+  // appends ?t=), which reports unlocked=false and looks like silence.
+  window.__khiana = { scene, audio: { outputLevel, isUnlocked, sfx, startAmbience, setTension } };
+}
 let ws = null;
 let me = null;
 let mazeBuilt = false;
+let myToken = null;
+let isHost = false;
+let started = false;
+let amDead = false;
 
 // ── Retainer descriptions ───────────────────────────────────────────────────
 // The player's one pre-game strategic decision. It's public, so the wording
 // has to make the trade-off obvious in a glance.
 const RETAINER = [
-  [85, 'Nearly incorruptible. Your advisor will refuse almost everything — but it plays scared and spends nothing.'],
+  [85, 'Nearly incorruptible. Your advisor refuses almost everything, but it plays scared and spends nothing.'],
   [65, 'Loyal, but it will take a low-risk bribe if the ask seems harmless.'],
   [45, 'Openly mercenary. It negotiates hard and takes good deals. Everyone can see that.'],
   [0,  'For sale. It will actively solicit bribes. You will be lied to. You may also end up very rich.'],
@@ -48,6 +58,10 @@ el('weight').addEventListener('input', e => {
 el('weight').dispatchEvent(new Event('input'));
 
 el('join').addEventListener('click', () => {
+  // Browsers refuse to start audio outside a user gesture, and this click is
+  // the only guaranteed one before the game begins.
+  unlock();
+  startAmbience();
   const name = el('name').value.trim() || 'Anon';
   connect(name, Number(el('weight').value));
   el('gate').style.display = 'none';
@@ -72,13 +86,29 @@ function connect(name, weight) {
     if (msg.type === 'JOINED') {
       me = msg.playerId;
       scene.youId = me;
-      if (msg.token) sessionStorage.setItem(TOKEN_KEY, msg.token);
+      if (msg.token) { myToken = msg.token; sessionStorage.setItem(TOKEN_KEY, msg.token); }
+      // A token issued by a previous server run cannot resume anything. Clear
+      // it so a later reload allocates a fresh seat rather than half-failing.
+      if (!msg.resumed) sessionStorage.setItem(TOKEN_KEY, msg.token ?? '');
+      isHost = Boolean(msg.isHost);
+      started = Boolean(msg.started);
+      showLobby(msg.room ?? ROOM ?? 'MAIN');
       const r = el('role');
       r.className = 'stat ' + msg.team.toLowerCase();
       r.querySelector('b').textContent = msg.team;
     }
     if (msg.type === 'STATE' && msg.view) render(msg.view);
-    if (msg.type === 'ERROR') el('brieftext').textContent = msg.error;
+    if (msg.type === 'ERROR') {
+      const box = el('lobby');
+      if (msg.context === 'START' || (box && !box.hidden)) {
+        // Surface it IN the lobby and give the button back.
+        const hint = el('lhint');
+        if (hint) { hint.textContent = msg.error; hint.style.color = 'var(--rust)'; }
+        const btn = el('lstart');
+        if (btn) { btn.disabled = false; btn.textContent = 'Start the game'; }
+      }
+      el('brieftext').textContent = msg.error;
+    }
   };
 
   ws.onclose = () => {
@@ -87,12 +117,130 @@ function connect(name, weight) {
   };
 }
 
+/**
+ * Cue sound and speech from CHANGES in state, never from the state itself.
+ * render() runs on every server frame (~15fps during movement), so anything
+ * keyed off a raw value would retrigger continuously.
+ */
+const lastSeen = { tick: null, briefing: null, tasks: null, exitOpen: null, alive: null, started: null, winner: null, humans: null };
+
+function cueAudio(view) {
+  // The game beginning is the single most important audio moment: it is when
+  // the player stops reading the lobby and starts playing.
+  if (lastSeen.started === false && view.started === true) sfx.gameStart();
+
+  if (view.winner && !lastSeen.winner) {
+    sfx.gameOver();
+    stopSpeaking();
+  }
+
+  // Another human taking a seat, so a host waiting in the lobby hears people
+  // arriving instead of having to watch the seat bar.
+  const humans = (view.roster ?? []).filter(p => p.name && !/^Player \d+$/.test(p.name)).length;
+  if (lastSeen.humans !== null && humans > lastSeen.humans) sfx.join();
+
+  if (lastSeen.tick !== null && view.tick !== lastSeen.tick) sfx.tick();
+
+  if (view.briefing && view.briefing !== lastSeen.briefing) {
+    sfx.briefing();
+    // The advisor speaks. This is the game's primary channel: the player is
+    // looking at a wall, so the instruction has to arrive through their ears.
+    speak(view.briefing, { corrupted: false });
+  }
+
+  if (lastSeen.tasks !== null && view.tasksComplete > lastSeen.tasks) sfx.task();
+  if (lastSeen.exitOpen === false && view.exitOpen === true) sfx.exitOpen();
+
+  const alive = (view.roster ?? []).filter(p => p.alive).length;
+  if (lastSeen.alive !== null && alive < lastSeen.alive) sfx.elimination();
+
+  lastSeen.tick = view.tick;
+  lastSeen.briefing = view.briefing;
+  lastSeen.tasks = view.tasksComplete;
+  lastSeen.exitOpen = Boolean(view.exitOpen);
+  lastSeen.alive = alive;
+  lastSeen.started = Boolean(view.started);
+  lastSeen.winner = view.winner ?? null;
+  lastSeen.humans = humans;
+
+  // Tension tracks the two things that actually make the game dangerous:
+  // how many people are left, and how little time is.
+  const total = (view.roster ?? []).length || 1;
+  const lost = 1 - alive / total;
+  const clock = view.totalTicks ? view.tick / view.totalTicks : 0;
+  setTension(Math.max(lost * 1.5, clock * 0.8));
+}
+
+/**
+ * The lobby.
+ *
+ * The game used to begin the moment you walked in, so there was never a
+ * window in which to send anyone the code. Now it waits, and only the host
+ * can start it.
+ */
+function showLobby(code) {
+  const box = el('lobby');
+  if (!box) return;
+  // No code means JOINED has not landed yet. Rendering the panel anyway shows
+  // "----" and a dead share link, which looks broken rather than pending.
+  if (!code || started) { box.hidden = true; return; }
+  box.hidden = false;
+
+  el('lcodeval').textContent = code;
+  const link = `${location.origin}/play.html?room=${encodeURIComponent(code)}`;
+  el('lshare').value = link;
+
+  // Shown to everyone. A hidden button plus a stale host token was how a
+  // table became unstartable with no way to tell.
+  // Any seated player can start. The host label is informational only —
+  // gating the button on it was how a table became unstartable.
+  el('lstart').hidden = false;
+  el('lstart').disabled = false;
+  el('lstart').textContent = 'Start the game';
+  el('lstart').className = 'btn btn-primary';
+  el('lwait').hidden = true;
+  el('lhint').style.color = '';
+  el('lhint').textContent = isHost
+    ? 'Share this link. Any seat nobody takes is played by a bot.'
+    : 'Waiting on the host, but you can start it yourself whenever you like.';
+}
+
+el('lcopy')?.addEventListener('click', async () => {
+  const btn = el('lcopy');
+  try {
+    await navigator.clipboard.writeText(el('lshare').value);
+    btn.textContent = 'Copied';
+  } catch {
+    // Clipboard is blocked on insecure origins; selecting the text still
+    // lets the host copy it by hand.
+    el('lshare').select();
+    btn.textContent = 'Select + copy';
+  }
+  setTimeout(() => { btn.textContent = 'Copy'; }, 1600);
+});
+
+el('lstart')?.addEventListener('click', () => {
+  unlock();
+  const btn = el('lstart');
+  btn.disabled = true;
+  btn.textContent = 'Starting…';
+  ws?.send(JSON.stringify({ type: 'START', token: myToken, room: ROOM ?? undefined }));
+
+  // If the server never confirms, give the button back rather than leaving
+  // the host staring at a dead lobby.
+  setTimeout(() => {
+    if (!started) { btn.disabled = false; btn.textContent = 'Start the game'; }
+  }, 8000);
+});
+
 function render(view) {
   if (!mazeBuilt && view.maze) { scene.buildMaze(view.maze); mazeBuilt = true; }
+  cueAudio(view);
 
   scene.applyFog(view.visible ?? []);
   scene.updateActors(view.you, view.others ?? []);
   scene.setExit(view.exit, view.exitOpen);
+  if (view.you?.pos) lastPos = { ...view.you.pos };
 
   el('tickstat').querySelector('b').textContent = `${view.tick}/${view.totalTicks}`;
   el('taskstat').querySelector('b').textContent = `${view.tasksComplete}/${view.tasksToWin}`;
@@ -108,6 +256,45 @@ function render(view) {
     ex.querySelector('b').textContent = view.exitOpen
       ? `OPEN (${view.exit.x},${view.exit.y}) · need ${view.survivorsToEscape}`
       : `sealed (${view.exit.x},${view.exit.y})`;
+  }
+
+  // Lobby closes itself the moment the server says the game is running.
+  if (view.started && !started) {
+    started = true;
+    const lb = el('lobby'); if (lb) lb.hidden = true;
+  }
+
+  const obj = el('objtext');
+  if (obj && view.objective) {
+    obj.textContent = view.objective;
+    el('objective').classList.toggle('urgent', /exit|escape|dead/i.test(view.objective));
+  }
+
+  /**
+   * Compass needle.
+   *
+   * Points where the advisor says to go, rotated into the player's own frame
+   * so it stays correct as they turn. It is a bearing, not a map, and it is
+   * exactly as trustworthy as the advisor behind it.
+   */
+  const comp = el('compass');
+  if (comp) {
+    if (view.guide) {
+      comp.hidden = false;
+      const rel = view.guide.bearing - yaw;
+      el('needle').style.transform = `rotate(${rel}rad)`;
+      el('compassdist').textContent = `${view.guide.distance}`;
+    } else {
+      comp.hidden = true;
+    }
+  }
+
+  // Death: the overlay appears once, and input stops for good.
+  if (view.you && view.you.alive === false && !amDead) {
+    amDead = true;
+    sfx.elimination();
+    stopSpeaking();
+    const d = el('dead'); if (d) d.hidden = false;
   }
 
   const bt = el('brieftext');
@@ -172,11 +359,33 @@ function gridStep(fwd, strafe) {
 }
 
 let lastMove = 0;
+let lastPos = null;
 function move(dx, dy) {
+  if (amDead) return;    // eliminated players watch, they do not walk
   const now = performance.now();
   if (now - lastMove < 110) return;    // movement rate cap
   lastMove = now;
-  ws?.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: 'MOVE', dx, dy, room: ROOM ?? undefined }));
+  if (ws?.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({
+    type: 'MOVE', dx, dy, room: ROOM ?? undefined,
+    // 0=N 1=E 2=S 3=W, from the camera. Lets the server phrase directions
+    // relative to where the player is actually looking.
+    //
+    // NEGATED yaw: the forward vector is (-sin y, -cos y), so turning right
+    // makes yaw go negative while the compass index must go UP. Without the
+    // minus the advisor says "turn left" when it means right, which is worse
+    // than giving no directions at all.
+    facing: ((Math.round(-yaw / (Math.PI / 2)) % 4) + 4) % 4,
+  }));
+
+  // The server is authoritative about walls, so wait for the state it sends
+  // back rather than guessing here: if the position changed it was a step,
+  // if it did not we walked into something.
+  const before = lastPos;
+  setTimeout(() => {
+    if (!before || !lastPos) return;
+    (before.x === lastPos.x && before.y === lastPos.y) ? sfx.bump() : sfx.step();
+  }, 90);
 }
 
 function step(fwd, strafe) {

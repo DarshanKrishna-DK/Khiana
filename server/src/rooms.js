@@ -41,10 +41,18 @@ function newCode() {
   throw new Error('could not allocate a unique room code');
 }
 
-export function createRoom({ name, isPublic = true, seed, hostName } = {}) {
+export function createRoom({ name, isPublic = true, seed, hostName, code: fixedCode } = {}) {
   if (rooms.size >= MAX_ROOMS) throw new Error('server is at room capacity');
 
-  const code = newCode();
+  /**
+   * A caller may pin the code (the main table wants "MAIN", not 4 random
+   * letters). It must be honoured HERE, at registration, because the registry
+   * is keyed by code: assigning room.code afterwards changes the property but
+   * leaves the Map entry under the old key, and every lookup then misses.
+   * That bug shipped, and surfaced as agents reporting "room MAIN not found".
+   */
+  const code = fixedCode ? String(fixedCode).toUpperCase() : newCode();
+  if (fixedCode && rooms.has(code)) throw new Error(`room ${code} already exists`);
   const room = {
     code,
     name: (name || `${hostName ? hostName + "'s" : 'Open'} lobby`).slice(0, 40),
@@ -56,6 +64,18 @@ export function createRoom({ name, isPublic = true, seed, hostName } = {}) {
     createdAt: Date.now(),
     lastSeenAt: Date.now(),
     recordingFile: null,
+    broadcastTimer: null,
+    /**
+     * Lobby state.
+     *
+     * hostToken is the seat token of whoever opened the table. Only they can
+     * start it. Without this the game began the instant anyone walked in, so
+     * there was no window to share a code and nobody could ever join you.
+     */
+    hostToken: null,
+    hostId: null,
+    /** Bots only take over once nobody is coming. */
+    autoStartAt: null,
   };
   rooms.set(code, room);
   return room;
@@ -91,6 +111,9 @@ export function roomSummary(room) {
     // Empty seats auto-fill with bots, so a game is always joinable until it
     // ends — "open" here means "you can still take a seat", not "waiting".
     joinable: !g.winner && humanCount(room) < CONFIG.GAME.PLAYERS,
+    hostId: room.hostId,
+    /** Seconds until bots take over, or null if a human is expected. */
+    autoStartIn: room.autoStartAt ? Math.max(0, Math.round((room.autoStartAt - Date.now()) / 1000)) : null,
     createdAt: room.createdAt,
   };
 }
@@ -136,6 +159,53 @@ export function detach(room, ws) {
   if (meta?.playerId) releaseSeat(room.game, meta.playerId);
   room.sockets.delete(ws);
   room.lastSeenAt = Date.now();
+
+  // If the host walks out before starting, hand the lobby to whoever is left
+  // rather than leaving a table nobody is allowed to begin.
+  if (meta?.playerId && meta.playerId === room.hostId && !room.game.started) {
+    const remaining = [...room.sockets.values()].find(m => m.role === 'player' && m.playerId);
+    if (remaining) {
+      room.hostId = remaining.playerId;
+      room.hostToken = [...room.seatTokens.entries()].find(([, id]) => id === remaining.playerId)?.[0] ?? null;
+    } else {
+      room.hostToken = null;
+      room.hostId = null;
+    }
+  }
+}
+
+/**
+ * May this token start the game?
+ *
+ * Plain token equality was not enough. The host slot is claimed by whoever
+ * joins first, and a host who closes their tab without a clean socket close
+ * leaves a GHOST HOST: a token nobody holds, which blocks every remaining
+ * player from ever starting. The lobby then sits on "Starting…" forever.
+ *
+ * So: the real host wins, but if the recorded host has no live socket in the
+ * room, anyone seated may start instead. A locked table is a worse failure
+ * than the wrong person pressing go.
+ */
+export function isHost(room, token) {
+  return Boolean(token) && token === room.hostToken;
+}
+
+/**
+ * May this token start the game? ANY seated player may.
+ *
+ * The host label is now informational only. Gating the start on it produced a
+ * class of dead lobby that a player could neither diagnose nor escape: the
+ * host slot goes to whoever joins first, so a forgotten background tab, a
+ * reconnect that issued a fresh token, or a stale sessionStorage entry from a
+ * previous server run all left a table nobody present was allowed to begin.
+ * The button sat on "Starting…" and the refusal was invisible behind the
+ * lobby overlay.
+ *
+ * This is a party game. The cost of the wrong person pressing go is nil. The
+ * cost of a table nobody can start is the entire session.
+ */
+export function canStart(room, token) {
+  return Boolean(token) && room.seatTokens.has(token);
 }
 
 /**
@@ -151,7 +221,7 @@ export function seatPlayer(room, ws, { name, token, playerId } = {}) {
   const resumedId = token && room.seatTokens.get(token);
   const seat = (resumedId && g.players[resumedId])
     ?? (playerId ? g.players[playerId] : null)
-    ?? firstOpenSeat(g);
+    ?? randomOpenSeat(g);
 
   if (!seat) return { error: 'This lobby is full.' };
   if (!seat.alive && !resumedId) return { error: 'No living seats left in this game.' };
@@ -163,12 +233,57 @@ export function seatPlayer(room, ws, { name, token, playerId } = {}) {
   const issued = (token && resumedId) ? token : randomUUID();
   room.seatTokens.set(issued, seat.id);
 
-  return { seat, token: issued, resumed: Boolean(resumedId) };
+  // First human through the door owns the lobby.
+  if (!room.hostToken) {
+    room.hostToken = issued;
+    room.hostId = seat.id;
+  }
+
+  return {
+    seat, token: issued, resumed: Boolean(resumedId),
+    isHost: issued === room.hostToken,
+  };
 }
 
 export function movePlayerIn(room, playerId, dx, dy) {
   movePlayer(room.game, playerId, dx, dy);
   room.lastSeenAt = Date.now();
+  scheduleBroadcast(room);
+}
+
+/**
+ * Coalesced broadcast, ~15fps.
+ *
+ * Movement used to push state only to the socket that moved, so the spectator
+ * board froze between ticks and positions appeared to update only on reload.
+ * Broadcasting on every keypress instead would mean up to 8 players x 9 moves
+ * a second x N spectators of full board serialisation, so the writes are
+ * coalesced into one frame instead.
+ */
+const BROADCAST_MS = Number(process.env.BROADCAST_MS ?? 66);
+
+export function scheduleBroadcast(room) {
+  if (room.broadcastTimer) return;
+  room.broadcastTimer = setTimeout(() => {
+    room.broadcastTimer = null;
+    broadcast(room);
+  }, BROADCAST_MS);
+  room.broadcastTimer.unref?.();
+}
+
+/**
+ * A random free seat, rather than always the lowest-numbered one.
+ *
+ * firstOpenSeat() handed out p1 every single time, so on a given server the
+ * first player to join always got p1's role. Since roles are fixed per game
+ * seed, that meant testing the same room repeatedly always produced the same
+ * team — it looked like role assignment was broken when in fact seat
+ * assignment was deterministic.
+ */
+function randomOpenSeat(state) {
+  const open = Object.values(state.players).filter(p => p.isBot && p.alive);
+  if (!open.length) return null;
+  return open[Math.floor(Math.random() * open.length)];
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
@@ -221,6 +336,8 @@ export function finishRoom(room) {
 export function stopRoomLoop(room) {
   if (room.loop) clearInterval(room.loop);
   room.loop = null;
+  if (room.broadcastTimer) clearTimeout(room.broadcastTimer);
+  room.broadcastTimer = null;
 }
 
 export function resetRoom(room, seed) {
@@ -255,6 +372,39 @@ export function reapRooms(now = Date.now()) {
     if ((empty && stale) || done) { closeRoom(code); reaped++; }
   }
   return reaped;
+}
+
+/**
+ * Bots take the table if nobody else shows up.
+ *
+ * The host controls the start, which is right — but a host who wanders off,
+ * or a solo player who just wants to see the game, should not be stuck in an
+ * empty lobby forever. After AUTO_START_MS with at least one human seated and
+ * the game still not begun, it begins itself.
+ */
+const AUTO_START_MS = Number(process.env.AUTO_START_MS ?? 90_000);
+
+export function tickAutoStart(now = Date.now()) {
+  for (const room of rooms.values()) {
+    if (room.game.started || room.game.winner) { room.autoStartAt = null; continue; }
+    const humans = humanCount(room);
+    if (humans === 0) { room.autoStartAt = null; continue; }
+
+    // A full table has nobody left to wait for, so give the host only a short
+    // grace period rather than the full ninety seconds.
+    const wait = humans >= CONFIG.GAME.PLAYERS ? 15_000 : AUTO_START_MS;
+    if (!room.autoStartAt) room.autoStartAt = now + wait;
+    else if (now >= room.autoStartAt) {
+      room.autoStartAt = null;
+      startRoom(room).catch(() => {});
+    }
+  }
+}
+
+export function startAutoStarter(intervalMs = 3_000) {
+  const t = setInterval(() => tickAutoStart(), intervalMs);
+  t.unref?.();
+  return t;
 }
 
 export function startReaper(intervalMs = 60_000) {

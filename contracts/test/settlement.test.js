@@ -46,7 +46,7 @@ async function authorize(token, signer, payee, value, chainId, overrides = {}) {
   return { auth, signature };
 }
 
-describe('BlindsideEscrow', () => {
+describe('KhianaEscrow', () => {
   let token, escrow, engine, payer, payee, outsider, chainId;
   const cond = t => ethers.keccak256(ethers.toUtf8Bytes(t));
   const AMOUNT = ethers.parseEther('0.5');
@@ -57,7 +57,7 @@ describe('BlindsideEscrow', () => {
 
     token = await ethers.deployContract('KhianaCredit', [SUPPLY, engine.address]);
     await token.waitForDeployment();
-    escrow = await ethers.deployContract('BlindsideEscrow', [engine.address, await token.getAddress()]);
+    escrow = await ethers.deployContract('KhianaEscrow', [engine.address, await token.getAddress()]);
     await escrow.waitForDeployment();
 
     for (const who of [payer, payee, outsider]) {

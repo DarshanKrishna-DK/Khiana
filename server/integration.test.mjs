@@ -58,10 +58,35 @@ srv.stderr.on('data', d => { srvOut += d; });
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function main() {
-  await sleep(2500);
+/**
+ * Wait for the server to answer, rather than guessing a fixed delay.
+ *
+ * A hardcoded 2500ms passed on an idle machine and failed the moment
+ * anything else was running, producing an ECONNREFUSED that looked like a
+ * real regression. Polling removes the flake entirely.
+ */
+async function waitForServer(ms = 20000) {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetch(`http://localhost:${PORT}/health`);
+      if (r.ok) return true;
+    } catch { /* not up yet */ }
+    await sleep(250);
+  }
+  return false;
+}
 
-  console.log('\nBLINDSIDE integration test\n');
+async function main() {
+  if (!await waitForServer()) {
+    console.error(`
+Server did not come up on :${PORT} within 20s.
+`);
+    console.error(srvOut);
+    process.exit(1);
+  }
+
+  console.log('\nKhiana integration test\n');
 
   // ── HTTP ──────────────────────────────────────────────────────────────
   const health = await fetch('http://localhost:8799/health').then(r => r.json());

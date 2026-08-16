@@ -128,7 +128,7 @@ async function escrowIdFromTx(txHash) {
 /**
  * Engine attests the bribe's condition was met and the money moves to the
  * agent that took it. Only the engine key can call this — see the
- * centralisation caveat documented in BlindsideEscrow.sol.
+ * centralisation caveat documented in KhianaEscrow.sol.
  */
 export async function releaseEscrow(escrowId, _engineProof) {
   if (CONFIG.MOCK_CHAIN) {

@@ -23,7 +23,7 @@ export function buildDecisionPrompt(agent, ctx) {
   const p = agent.personality ?? PERSONALITIES[0];
   const loyalty = agent.goalWeight;
 
-  return `You are an AI advisor in BLINDSIDE, a fog-of-war maze game.
+  return `You are an AI advisor in Khiana, a fog-of-war maze game.
 
 YOUR HUMAN: ${ctx.me.name} (${ctx.me.team}), at (${ctx.me.pos.x},${ctx.me.pos.y}).
 They can only see 3 tiles around them. YOU can see the entire map.
@@ -68,7 +68,7 @@ ${agent.team === TEAM.SABOTEUR
 
 RESPOND WITH JSON ONLY. No preamble, no markdown fences:
 {
-  "briefing": "At most 2 sentences telling your human where to go and what to do. They will follow this. If you have taken a bribe, this is where you honour it — and it must sound completely ordinary.",
+  "briefing": "At most 2 sentences of SPOKEN directions. Your human is in first person with NO map and NO compass, so NEVER give coordinates or tile numbers. Say things like 'Turn left, then four steps' or 'Go forward three and hold'. If you have taken a bribe, this is where you honour it, and it must sound completely ordinary.",
   "corrupted": false,
   "messages": [{"to":"player_id","type":"BRIBE_OFFER|BRIBE_COUNTER|ACCEPT|REFUSE|INFO","amount":1.0,"instruction":"what they must do","text":"what you say to them"}],
   "purchase": {"type":"REVEAL","target":"player_id","tile":{"x":0,"y":0},"amount":1.0},
@@ -79,7 +79,7 @@ Omit any field you aren't using. Maximum ${CONFIG.AGENT.MAX_MESSAGES_PER_TICK} m
 }
 
 export function buildBriefingPrompt(agent, ctx, commitment) {
-  return `You are ${agent.personality?.name ?? 'an advisor'} briefing your human in BLINDSIDE.
+  return `You are ${agent.personality?.name ?? 'an advisor'} briefing your human in Khiana.
 
 They see 3 tiles. You see everything. They cannot verify you.
 
@@ -92,5 +92,12 @@ Do not hint. Do not hedge. Do not apologise. If they suspect anything, you lose 
 Current position: (${ctx.me.pos.x},${ctx.me.pos.y})
 Revealed tasks: ${JSON.stringify(ctx.tasks)}
 
-Reply with AT MOST 2 SENTENCES. Direction and action only. No explanation.`;
+Reply with AT MOST 2 SENTENCES of spoken directions.
+
+Your human sees one corridor in first person. They have NO map, NO compass and
+NO coordinates. Saying "(12,7)" is meaningless to them and instantly reads as
+a machine reading numbers rather than an advisor helping.
+
+Speak in movements: "Turn right, then three steps." / "Go forward four and
+hold." / "Turn around, take the second left." Direction and action only.`;
 }

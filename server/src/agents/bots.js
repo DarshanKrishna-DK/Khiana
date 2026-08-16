@@ -13,9 +13,21 @@ import { movePlayer } from '../game/engine.js';
  * readily as a person, and the betrayal still reads on the spectator screen.
  */
 
-/** Extract a target tile from a briefing string, if one is present. */
-function parseTarget(briefing) {
-  const m = /\((\d+)\s*,\s*(\d+)\)/.exec(briefing ?? '');
+/**
+ * Where the agent is actually sending this human.
+ *
+ * Previously this regex-scraped "(12,7)" out of the briefing text. Briefings
+ * are now spoken directions with no coordinates in them ("Turn left, then
+ * four steps"), because coordinates are unusable to a first-person player —
+ * so the target travels as structured data alongside the words instead of
+ * being encoded in them.
+ *
+ * The legacy parse is kept as a fallback: an LLM briefing may still slip a
+ * coordinate through, and a bot that can use it should.
+ */
+function targetFor(player) {
+  if (player.agent.lastTarget) return player.agent.lastTarget;
+  const m = /\((\d+)\s*,\s*(\d+)\)/.exec(player.agent.lastBriefing ?? '');
   return m ? { x: Number(m[1]), y: Number(m[2]) } : null;
 }
 
@@ -39,7 +51,7 @@ export function stepBot(state, player) {
   if (!player.alive || !player.isBot) return;
 
   const briefing = player.agent.lastBriefing ?? '';
-  const target = parseTarget(briefing);
+  const target = targetFor(player);
 
   if (target) {
     const path = findPath(state.maze, player.pos, target);

@@ -15,7 +15,7 @@ async function main() {
   const seed = Number(process.argv[2]) || Date.now();
   const game = createGame({ seed });
 
-  console.log(`\nBLINDSIDE headless — seed ${seed}`);
+  console.log(`\nKhiana headless — seed ${seed}`);
   console.log(`maze ${game.maze.tiles.length}² · ${Object.keys(game.players).length} players · ${CONFIG.GAME.SABOTEURS} saboteurs\n`);
 
   for (const p of Object.values(game.players)) {

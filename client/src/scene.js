@@ -1,4 +1,11 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { VignetteShader } from 'three/addons/shaders/VignetteShader.js';
+
+import { makeCharacter, animateCharacter, killCharacter, updateDeath } from './character.js';
 
 /**
  * First-person scene.
@@ -99,6 +106,8 @@ export class Scene {
     this.headLamp = new THREE.PointLight(0xFFC98A, 3.2, 3.4, 2);
     this.scene.add(this.headLamp);
 
+    this.setupPost();
+
     this.walls = null;
     this.floors = null;
     this.ceiling = null;
@@ -109,11 +118,51 @@ export class Scene {
     addEventListener('resize', () => this.onResize());
   }
 
+  /**
+   * Post-processing: bloom then vignette, and nothing else.
+   *
+   * Bloom is doing real work here rather than decoration — the torch, the
+   * visors and the extraction beam are the only light sources in a black
+   * maze, and bleeding them slightly is what makes them read as light rather
+   * than as bright polygons. Threshold is high so only those genuinely bright
+   * pixels bloom; a low threshold would fog the whole corridor.
+   *
+   * The vignette does the opposite job: it crushes the screen edges, which
+   * tightens the sense of a corridor closing in and hides the hard edge where
+   * FogExp2 reaches full density.
+   *
+   * Both are cheap. Deliberately skipped: SSAO, DOF and FXAA — each is another
+   * full-screen pass, and this game must hold framerate on an integrated GPU
+   * in a venue, not win a rendering benchmark.
+   */
+  setupPost() {
+    const half = new THREE.Vector2(innerWidth / 2, innerHeight / 2);
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+
+    // Half-resolution bloom. At this blur radius the difference is invisible
+    // and it costs a quarter of the fill rate.
+    this.bloom = new UnrealBloomPass(half, 0.62, 0.72, 0.62);
+    this.composer.addPass(this.bloom);
+
+    this.vignette = new ShaderPass(VignetteShader);
+    this.vignette.uniforms.offset.value = 0.92;
+    this.vignette.uniforms.darkness = { value: 1.25 };
+    this.composer.addPass(this.vignette);
+
+    // A weak device gets the plain renderer instead of a slideshow.
+    const weak = /iPhone|iPad|Android/i.test(navigator.userAgent)
+      || (navigator.hardwareConcurrency ?? 8) <= 4;
+    this.postEnabled = !weak;
+  }
+
   onResize() {
     this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    this.composer?.setSize(innerWidth, innerHeight);
+    this.bloom?.resolution.set(innerWidth / 2, innerHeight / 2);
   }
 
   /** Look direction, in radians. Driven by mouse / touch / Q-E from main.js. */
@@ -215,21 +264,6 @@ export class Scene {
     if (this.floors.instanceColor) this.floors.instanceColor.needsUpdate = true;
   }
 
-  /** CylinderGeometry + Sphere rather than CapsuleGeometry, which is r142+. */
-  makeActor(color) {
-    const g = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({
-      color, roughness: .45, metalness: .15,
-      emissive: color, emissiveIntensity: .35,
-    });
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(.26, .26, .5, 12), mat);
-    body.position.y = .35; body.castShadow = true;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(.26, 14, 10), mat);
-    head.position.y = .68; head.castShadow = true;
-    g.add(body, head);
-    return g;
-  }
-
   updateActors(you, others) {
     const seen = new Set();
 
@@ -237,14 +271,17 @@ export class Scene {
       seen.add(p.id);
       let a = this.actors.get(p.id);
       if (!a) {
-        a = this.makeActor(
-          p.decoy ? COLORS.violet : p.team === 'SABOTEUR' ? COLORS.rust : COLORS.teal
+        a = makeCharacter(
+          p.decoy ? COLORS.violet : p.team === 'SABOTEUR' ? COLORS.rust : COLORS.teal,
+          { isSaboteur: p.team === 'SABOTEUR', decoy: Boolean(p.decoy) }
         );
         this.actors.set(p.id, a);
         this.scene.add(a);
         a.position.set(p.pos.x, 0, p.pos.y);
+        a.userData.last = new THREE.Vector3(p.pos.x, 0, p.pos.y);
       }
       a.userData.target = new THREE.Vector3(p.pos.x, 0, p.pos.y);
+      if (p.alive === false && !a.userData.dead) killCharacter(a);
     }
 
     // In first person you are inside your own head — drawing your body puts a
@@ -309,7 +346,22 @@ export class Scene {
 
   render(dt) {
     for (const [, a] of this.actors) {
-      if (a.userData.target) a.position.lerp(a.userData.target, Math.min(1, dt * 9));
+      if (!a.userData.target) continue;
+      const prev = a.userData.last ?? a.position.clone();
+      a.position.lerp(a.userData.target, Math.min(1, dt * 9));
+
+      if (a.userData.dead) {
+        updateDeath(a, dt);
+      } else {
+        // Walk weight comes from how far the figure actually moved this frame,
+        // so a character standing still stands still instead of miming a
+        // stride on the spot.
+        const dx = a.position.x - prev.x, dz = a.position.z - prev.z;
+        const dist = Math.hypot(dx, dz);
+        const facing = dist > 0.0008 ? Math.atan2(dx, dz) : null;
+        animateCharacter(a, dt, Math.min(1, dist / (dt * 2.2 || 1)), facing);
+      }
+      a.userData.last = a.position.clone();
     }
 
     if (this.youPos) {
@@ -338,6 +390,9 @@ export class Scene {
       this.exitMesh.rotation.y += dt * .5;
     }
 
-    this.renderer.render(this.scene, this.camera);
+    // composer.render() replaces renderer.render() — calling both draws the
+    // scene twice and the post pass is thrown away.
+    if (this.postEnabled && this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 }

@@ -3,10 +3,14 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>BLINDSIDE</title>
+<title>Khiana</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Roboto+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#0E091C">
 <style>
   /* ── Design tokens ────────────────────────────────────────────────────
      Palette is drawn from the subject: a dark maze lit badly, money moving
@@ -14,19 +18,15 @@
      actually see, amber for money, rust for the people who want you dead,
      violet for the channel you're not allowed to read.                    */
   :root {
-    --ink:      #0B0E14;
-    --panel:    #131823;
-    --fog:      #1C2230;
-    --edge:     #2A3244;
-    --bone:     #E8E3D9;
-    --muted:    #7A8499;
-    --amber:    #E5A93C;
-    --rust:     #C2503A;
-    --violet:   #7B6CD9;
-    --teal:     #5FA8A0;
-
-    --mono: 'IBM Plex Mono', ui-monospace, monospace;
-    --display: 'Archivo', system-ui, sans-serif;
+    /* Monad brand palette (monad.xyz/brand-and-media-kit), shared verbatim
+       with the landing page and the spectator so all three read as one game. */
+    --ink:#0E091C; --panel:#150E2B; --fog:#1E1440; --edge:#2C1F5C;
+    --purple:#6E54FF; --lavender:#DDD7FE; --cyan:#85E6FF;
+    --sky:#B9E3F9; --pink:#FF8EE4; --orange:#FFAE45;
+    --bone:var(--lavender); --muted:#8778BE;
+    --amber:var(--cyan); --rust:var(--pink); --violet:var(--purple); --teal:var(--cyan);
+    --mono:'Roboto Mono',ui-monospace,monospace;
+    --display:'Pirata One',system-ui,serif;
   }
 
   * { box-sizing: border-box; }
@@ -40,7 +40,7 @@
   #vignette {
     position: fixed; inset: 0; pointer-events: none;
     background: radial-gradient(ellipse at center,
-      transparent 30%, rgba(11,14,20,.55) 65%, rgba(11,14,20,.92) 100%);
+      transparent 30%, rgba(11,14,20,.55) 65%, rgba(14,9,28,.93) 100%);
   }
 
   /* ── HUD ────────────────────────────────────────────────────────────── */
@@ -52,11 +52,8 @@
     padding: 14px 20px;
     background: linear-gradient(180deg, rgba(11,14,20,.95), transparent);
   }
-  #mark {
-    font-family: var(--display); font-weight: 800; font-size: 15px;
-    letter-spacing: .22em; color: var(--bone);
-  }
-  #mark span { color: var(--rust); }
+  #mark { height:26px; width:auto; display:block;
+    filter:drop-shadow(0 2px 5px rgba(0,0,0,.65)); }
 
   .stat { font-size: 11px; letter-spacing: .08em; color: var(--muted); }
   .stat b { display: block; font-size: 17px; color: var(--bone); font-weight: 600; letter-spacing: 0; }
@@ -83,7 +80,7 @@
   #briefing {
     bottom: 0; left: 0; right: 0;
     padding: 22px 20px 26px;
-    background: linear-gradient(0deg, rgba(11,14,20,.97) 60%, transparent);
+    background: linear-gradient(0deg, rgba(14,9,28,.97) 60%, transparent);
   }
   #briefing .who {
     font-size: 10px; letter-spacing: .2em; color: var(--violet);
@@ -163,6 +160,88 @@
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
   }
+  /* Buttons. Defined here rather than inherited: play.html is a separate
+     document from the landing page and shares no stylesheet. */
+  .btn {
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding:11px 20px; border-radius:10px; border:1px solid transparent;
+    font-family:inherit; font-size:13px; font-weight:600; letter-spacing:.02em;
+    cursor:pointer; white-space:nowrap;
+    transition:transform .12s cubic-bezier(.16,1,.3,1), background .2s, border-color .2s;
+  }
+  .btn:active { transform:translateY(1px) scale(.985); }
+  .btn:disabled { opacity:.55; cursor:default; }
+  .btn-primary { background:var(--amber); color:#0E091C; }
+  .btn-primary:hover:not(:disabled) { background:#A8EFFF; }
+  .btn-ghost { border-color:var(--edge); color:var(--bone); background:transparent; }
+  .btn-ghost:hover:not(:disabled) { border-color:var(--muted); background:rgba(221,215,254,.07); }
+
+  /* ── Objective: the one line telling you what winning looks like ────── */
+  #objective {
+    position:fixed; top:64px; left:50%; transform:translateX(-50%); z-index:20;
+    padding:7px 16px; border-radius:999px;
+    background:rgba(19,24,35,.92); border:1px solid var(--edge);
+    font-size:12px; color:var(--bone); letter-spacing:.01em;
+    max-width:min(92vw,640px); text-align:center;
+    backdrop-filter:blur(8px);
+  }
+  #objective.urgent { border-color:var(--amber); color:var(--amber); }
+
+  /* ── Compass: a bearing, never a coordinate ─────────────────────────── */
+  #compass {
+    position:fixed; top:104px; right:22px; z-index:20;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+  }
+  #compass svg { width:52px; height:52px; }
+  #compass circle { fill:rgba(19,24,35,.9); stroke:var(--edge); stroke-width:1.5; }
+  #compass #needle { fill:var(--amber); transform-origin:20px 20px; transition:transform .28s cubic-bezier(.16,1,.3,1); }
+  #compass b { font-size:10px; color:var(--muted); font-weight:500; font-variant-numeric:tabular-nums; }
+
+  /* ── Lobby ──────────────────────────────────────────────────────────── */
+  #lobby {
+    position:fixed; inset:0; z-index:80; display:grid; place-items:center;
+    background:rgba(14,9,28,.95); backdrop-filter:blur(10px);
+  }
+  .lobbybox {
+    width:min(460px,92vw); padding:34px; border-radius:16px;
+    background:var(--panel); border:1px solid var(--edge); text-align:center;
+  }
+  .lcode span { font-size:10px; letter-spacing:.18em; color:var(--muted); }
+  .lcode b { display:block; font-size:44px; letter-spacing:.14em; color:var(--amber);
+    font-family:var(--display,inherit); font-weight:800; line-height:1.15; }
+  .lhint { color:var(--muted); font-size:12.5px; margin:10px 0 18px; }
+  .lrow { display:flex; gap:8px; margin-bottom:18px; }
+  .lrow input {
+    flex:1; min-width:0; padding:10px 12px; border-radius:10px;
+    border:1px solid var(--edge); background:var(--ink); color:var(--muted);
+    font-family:var(--mono,monospace); font-size:11.5px;
+  }
+  .lseats { display:flex; gap:5px; margin-bottom:20px; }
+  .lseats i { flex:1; height:6px; border-radius:3px; background:var(--fog); transition:background .3s; }
+  .lseats i.on { background:var(--amber); }
+  #lstart { width:100%; }
+  .lwait { color:var(--muted); font-size:12px; margin:14px 0 0; }
+
+  /* ── Death ──────────────────────────────────────────────────────────── */
+  #dead {
+    position:fixed; inset:0; z-index:70; display:grid; place-items:center;
+    background:radial-gradient(circle at 50% 45%, rgba(255,142,228,.16), rgba(11,14,20,.93) 62%);
+    pointer-events:none;
+    animation:deadin .9s cubic-bezier(.16,1,.3,1);
+  }
+  @keyframes deadin { from { opacity:0; backdrop-filter:blur(0) } to { opacity:1 } }
+  .deadbox { text-align:center; }
+  .deadbox h2 {
+    font-size:clamp(2.2rem,7vw,3.6rem); letter-spacing:.16em; color:var(--rust);
+    margin:0 0 12px; font-weight:800;
+  }
+  .deadbox p { color:var(--bone); margin:0; font-size:14px; }
+  .deadbox .deadsub { color:var(--muted); font-size:12.5px; margin-top:8px; }
+
+  @media (prefers-reduced-motion:reduce) {
+    #dead { animation:none; }
+    #compass #needle { transition:none; }
+  }
 </style>
 </head>
 <body>
@@ -171,11 +250,16 @@
   <div id="tickbar"></div>
 
   <div class="hud" id="topbar">
-    <div id="mark">BLIND<span>SIDE</span></div>
-    <div class="stat" id="role">YOU ARE<b>—</b></div>
+    <img id="mark" src="/khiana-logo.png" alt="Khiana" height="26" />
+    <div class="stat" id="role">YOU ARE<b>...</b></div>
     <div class="stat" id="tickstat">TICK<b>0/40</b></div>
     <div class="stat amber" id="taskstat">TASKS<b>0/5</b></div>
     <div class="stat" id="exitstat" hidden>EXIT<b>sealed</b></div>
+    <div id="objective"><span id="objtext">&nbsp;</span></div>
+    <div id="compass" hidden title="Where your advisor is pointing you">
+      <svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18"/><polygon id="needle" points="20,5 25,24 20,20 15,24"/></svg>
+      <b id="compassdist">--</b>
+    </div>
   </div>
 
   <div class="hud" id="roster">
@@ -197,7 +281,7 @@
 
   <div id="gate">
     <div class="box">
-      <h1>BLIND<span>SIDE</span></h1>
+      <h1>KHI<span>ANA</span></h1>
       <p class="tag">
         You can see three tiles. Your advisor can see everything.<br>
         It may have been paid to lie to you.
@@ -209,6 +293,33 @@
       <div class="wv" id="wv">70 / 100</div>
       <div class="wd" id="wd"></div>
       <button id="join">Enter the maze</button>
+    </div>
+  </div>
+
+  <!-- Lobby. Shown until the host starts, so a table can actually be shared. -->
+  <div id="lobby" hidden>
+    <div class="lobbybox">
+      <div class="lcode">
+        <span>ROOM CODE</span>
+        <b id="lcodeval">----</b>
+      </div>
+      <p class="lhint" id="lhint">Share this link. Empty seats fill with bots.</p>
+      <div class="lrow">
+        <input type="text" id="lshare" readonly aria-label="Shareable link" />
+        <button class="btn btn-ghost" id="lcopy" type="button">Copy</button>
+      </div>
+      <div id="lseats" class="lseats"></div>
+      <button class="btn btn-primary" id="lstart" type="button" hidden>Start the game</button>
+      <p class="lwait" id="lwait" hidden>Waiting for the host to start…</p>
+    </div>
+  </div>
+
+  <!-- Death. A dead player keeps watching but cannot act. -->
+  <div id="dead" hidden>
+    <div class="deadbox">
+      <h2>ELIMINATED</h2>
+      <p id="deadby">A saboteur reached you in the dark.</p>
+      <p class="deadsub">You keep watching. You cannot move.</p>
     </div>
   </div>
 

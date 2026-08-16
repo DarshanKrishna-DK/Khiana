@@ -2,6 +2,7 @@ import { CONFIG, TEAM } from '../config.js';
 import { affordablePowerups } from '../game/powerups.js';
 import { taskBriefFor } from '../game/tasks.js';
 import { findPath, distance } from '../game/maze.js';
+import { describeRoute } from '../game/directions.js';
 import { buildDecisionPrompt, buildBriefingPrompt } from './prompts.js';
 import { callModel } from './llm.js';
 
@@ -184,7 +185,7 @@ export function buildContext(agent, state) {
   return {
     tick: state.tick,
     ticksLeft: CONFIG.GAME.TOTAL_TICKS - state.tick,
-    me: { id: me.id, name: me.name, team: me.team, pos: me.pos, alive: me.alive },
+    me: { id: me.id, name: me.name, team: me.team, pos: me.pos, alive: me.alive, facing: me.facing ?? null },
     balance: agent.balance,
     tasks,
     tasksComplete: state.tasksComplete,
@@ -288,11 +289,9 @@ function fallbackBrain(agent, state, ctx) {
     // around forever, because nothing else in the fallback brain knows the
     // exit exists and the win condition can never be satisfied.
     if (ctx.exitOpen && ctx.exit) {
-      const path = findPath(state.maze, me.pos, ctx.exit);
-      const dir = path && path[1] ? bearing(me.pos, path[1]) : null;
-      actions.briefing = dir
-        ? `Extraction is open. Head ${dir} to (${ctx.exit.x},${ctx.exit.y}) and hold.`
-        : `Hold at the exit (${ctx.exit.x},${ctx.exit.y}).`;
+      actions.briefing = 'Extraction is open. ' +
+        describeRoute(state.maze, me.pos, ctx.exit, me.facing ?? null, 'Get out.');
+      actions.target = ctx.exit;
       return actions;
     }
 
@@ -302,11 +301,8 @@ function fallbackBrain(agent, state, ctx) {
       const tile = task.type === 'SEQUENCE'
         ? (task.tiles[task.progress?.sequenceIndex ?? 0] ?? task.tiles[0])
         : task.tiles[(idx - 1) % task.tiles.length];
-      const path = findPath(state.maze, me.pos, tile);
-      const dir = path && path[1] ? bearing(me.pos, path[1]) : null;
-      actions.briefing = dir
-        ? `Head ${dir} toward (${tile.x},${tile.y}). Hold there when you arrive.`
-        : `Hold position at (${me.pos.x},${me.pos.y}).`;
+      actions.briefing = describeRoute(state.maze, me.pos, tile, me.facing ?? null);
+      actions.target = tile;
     } else {
       actions.briefing = 'Stay put. Nothing revealed yet.';
     }

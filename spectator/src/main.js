@@ -4,14 +4,18 @@ const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8787';
 // deployment needs no code change.
 const EXPLORER = import.meta.env.VITE_EXPLORER ?? 'https://testnet.monadscan.com';
 
+import { unlock, sfx, startAmbience, setTension } from './audio.js';
+
 const el = id => document.getElementById(id);
 const cv = el('cv');
 const ctx = cv.getContext('2d');
 
+// Canvas colours are duplicated from the CSS custom properties because a 2D
+// context cannot read them. Keep this block in sync with :root in index.html.
 const C = {
-  ink: '#0B0E14', fog: '#1C2230', edge: '#2A3244', floor: '#171D2A',
-  bone: '#E8E3D9', muted: '#7A8499', amber: '#E5A93C',
-  rust: '#C2503A', violet: '#7B6CD9', teal: '#5FA8A0',
+  ink: '#0E091C', fog: '#1E1440', edge: '#2C1F5C', floor: '#150E2B',
+  bone: '#DDD7FE', muted: '#8778BE', amber: '#85E6FF',
+  rust: '#FF8EE4', violet: '#6E54FF', teal: '#85E6FF',
 };
 
 let state = null;
@@ -80,7 +84,7 @@ function drawBoard() {
     if (state.exitOpen) {
       // Pulse only when it's live, so "open" reads as an event.
       const pulse = 0.5 + Math.sin(performance.now() * 0.004) * 0.5;
-      ctx.fillStyle = `rgba(229,169,60,${0.15 + pulse * 0.35})`;
+      ctx.fillStyle = `rgba(133,230,255,${0.15 + pulse * 0.35})`;
       ctx.fillRect(ex, ey, s, s);
     }
   }
@@ -98,14 +102,14 @@ function drawBoard() {
     const x = a.x + (b.x - a.x) * t;
     const y = a.y + (b.y - a.y) * t - Math.sin(t * Math.PI) * s * 2.5;
 
-    ctx.strokeStyle = `rgba(229,169,60,${0.35 * (1 - t)})`;
+    ctx.strokeStyle = `rgba(133,230,255,${0.35 * (1 - t)})`;
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
 
     ctx.fillStyle = C.amber;
     ctx.fillRect(x - s * .3, y - s * .2, s * .6, s * .4);
     ctx.fillStyle = C.ink;
-    ctx.font = `600 ${Math.max(7, s * .3)}px 'IBM Plex Mono', monospace`;
+    ctx.font = `600 ${Math.max(7, s * .3)}px 'Roboto Mono', monospace`;
     ctx.textAlign = 'center';
     ctx.fillText(String(e.amount), x, y + s * .12);
   }
@@ -116,7 +120,7 @@ function drawBoard() {
     const r = s * 0.4;
 
     if (!p.alive) {
-      ctx.strokeStyle = 'rgba(122,132,153,.4)';
+      ctx.strokeStyle = 'rgba(135,120,190,.45)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(c.x - r, c.y - r); ctx.lineTo(c.x + r, c.y + r);
@@ -128,7 +132,7 @@ function drawBoard() {
     // A violet halo marks an agent that has taken money. The audience
     // reads corruption at a glance; the player never will.
     if (p.bribed) {
-      ctx.fillStyle = 'rgba(123,108,217,.28)';
+      ctx.fillStyle = 'rgba(110,84,255,.30)';
       ctx.beginPath(); ctx.arc(c.x, c.y, r * 2.1, 0, Math.PI * 2); ctx.fill();
     }
 
@@ -168,7 +172,12 @@ function paintFeed() {
   for (const m of fresh) {
     if (m.kind === 'BRIBE_SETTLED') {
       envelopes.push({ from: m.from, to: m.to, amount: m.amount, t: 0 });
+      // Money changing hands is the beat the audience is here for.
+      sfx.bribe();
     }
+    if (m.kind === 'ELIMINATION') sfx.elimination();
+    if (m.kind === 'POWERUP') sfx.powerup();
+    if (m.kind === 'BRIBE_OFFER') sfx.briefing();
     const node = document.createElement('div');
     node.className = 'msg ' + cls(m);
     node.innerHTML = body(m);
@@ -217,10 +226,10 @@ function body(m) {
     // The link is the proof. Without it the audience has to take the host's
     // word that money actually moved, which is the one thing the chain is
     // here to make unnecessary.
-    text = `${m.amount} MON settled — "${esc(m.instruction ?? '')}" ${txLink(m.txHash)}`;
+    text = `${m.amount} KHIA settled for "${esc(m.instruction ?? '')}" ${txLink(m.txHash)}`;
   }
   if (m.kind === 'BRIBE_OFFER' || m.kind === 'BRIBE_COUNTER') {
-    text = `${m.amount ?? ''} MON — ${esc(m.text ?? '')}`;
+    text = `${m.amount ?? ''} KHIA · ${esc(m.text ?? '')}`;
   }
 
   // The dramatic-irony marker. This is the single most important line on
@@ -253,7 +262,7 @@ async function showReveal() {
       <div class="took">
         ${a.received.length
           ? a.received.map(r =>
-              `paid <b>${r.amount}</b> by ${r.from} — "${esc(r.memo ?? '')}" ${r.followed ? '<span class="hon">[HONOURED]</span>' : '[ignored]'} ${txLink(r.txHash)}`
+              `paid <b>${r.amount}</b> by ${r.from} to "${esc(r.memo ?? '')}" ${r.followed ? '<span class="hon">[HONOURED]</span>' : '[ignored]'} ${txLink(r.txHash)}`
             ).join('<br>')
           : '<span style="opacity:.4">never took a cent</span>'}
       </div>
@@ -293,6 +302,17 @@ function renderRoleCommit(rc) {
         ${rc.revealUrl ? `<a class="tx" href="${rc.revealUrl}" target="_blank" rel="noopener">tx ↗</a>` : ''}</div>` : ''}
     <div class="rc-verdict">${verdict}</div>`;
 }
+
+// ── Sound ───────────────────────────────────────────────────────────────────
+// Autoplay is blocked without a gesture, so this is a real button rather than
+// an attempt that silently fails.
+el('sound')?.addEventListener('click', e => {
+  unlock();
+  startAmbience();
+  e.currentTarget.classList.add('on');
+  e.currentTarget.textContent = 'SOUND ON';
+  e.currentTarget.disabled = true;
+});
 
 // ── Loop ────────────────────────────────────────────────────────────────────
 (function frame() {

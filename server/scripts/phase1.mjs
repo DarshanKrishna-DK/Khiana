@@ -80,7 +80,7 @@ check('p2 derived', !!p2.address, p2.address);
 const escrowLive = await hasCode(CONFIG.CHAIN.ESCROW_ADDRESS);
 const shopLive = await hasCode(CONFIG.CHAIN.SHOP_ADDRESS);
 const commitLive = await hasCode(CONFIG.CHAIN.COMMIT_ADDRESS);
-check('BlindsideEscrow deployed', escrowLive, CONFIG.CHAIN.ESCROW_ADDRESS || 'unset');
+check('KhianaEscrow deployed', escrowLive, CONFIG.CHAIN.ESCROW_ADDRESS || 'unset');
 check('PowerupShop deployed', shopLive, CONFIG.CHAIN.SHOP_ADDRESS || 'unset');
 check('RoleCommit deployed', commitLive, CONFIG.CHAIN.COMMIT_ADDRESS || 'unset');
 

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to BLINDSIDE are recorded here.
+All notable changes to Khiana are recorded here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -82,7 +82,7 @@ Initial scaffold.
 - Ledger reveal screen [Phase 7]
 - Bot fill for empty seats [Phase 8]
 - `MOCK_CHAIN` mode for offline development [Phase 8]
-- Solidity: `BlindsideEscrow`, `RoleCommit`, `PowerupShop` [Phase 1]
+- Solidity: `KhianaEscrow`, `RoleCommit`, `PowerupShop` [Phase 1]
 - x402 payment client with facilitator fallback [Phase 1]
 
 ### Docs

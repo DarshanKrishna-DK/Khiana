@@ -8,7 +8,7 @@ const path = require('path');
  *   cd contracts && npm run deploy
  *
  * The deployer is index 0 of AGENT_MNEMONIC — the same account the server
- * uses as its engine. This matters: BlindsideEscrow takes the engine address
+ * uses as its engine. This matters: KhianaEscrow takes the engine address
  * as an immutable constructor arg and gates release() behind onlyEngine.
  * Deploy from a different key and every bribe locks fine but can never be
  * released, with no error until the first release attempt at tick ~12.
@@ -82,7 +82,7 @@ async function main() {
 
   const deployed = { KhianaCredit: credit };
   for (const [label, name, args] of [
-    ['BlindsideEscrow', 'BlindsideEscrow', [deployer.address, credit]],
+    ['KhianaEscrow', 'KhianaEscrow', [deployer.address, credit]],
     ['RoleCommit', 'RoleCommit', []],
     ['PowerupShop', 'PowerupShop', [deployer.address, credit]],
   ]) {
@@ -94,7 +94,7 @@ async function main() {
     await pace();
   }
 
-  const Escrow = { getAddress: async () => deployed.BlindsideEscrow };
+  const Escrow = { getAddress: async () => deployed.KhianaEscrow };
   const Commit = { getAddress: async () => deployed.RoleCommit };
   const Shop = { getAddress: async () => deployed.PowerupShop };
 
