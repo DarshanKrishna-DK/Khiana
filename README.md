@@ -4,7 +4,7 @@
 
 ### You see one corridor. Your advisor sees everything.
 
-**A first-person maze where an AI advisor guides you through the dark — and it may have been paid, on-chain, to walk you into a wall.**
+**A first-person maze where an AI advisor guides you through the dark - and it may have been paid, on-chain, to walk you into a wall.**
 
 <br>
 
@@ -56,7 +56,7 @@ That opens three things:
 |---|---|---|
 | 🏠 | `localhost:5173` | Landing page, live lobby browser, how to play |
 | 🎮 | `localhost:5173/play.html` | The game, first person |
-| 📺 | `localhost:5174` | **Spectator view — this is the one to watch** |
+| 📺 | `localhost:5174` | **Spectator view - this is the one to watch** |
 
 The game runs fully in `MOCK_CHAIN` mode out of the box. Add a `GROQ_API_KEY` for real LLM advisors, an `AGENT_MNEMONIC` for real on-chain settlement. Both optional.
 
@@ -91,7 +91,7 @@ Same commands for `./khiana.sh`.
 | **Their advisor** | full map | own chats only | ✅ | own bribes only |
 | **Audience** | full map | ✅ **all of it** | ✅ | ✅ **all of it** |
 
-Teams are **public from tick zero**. This is deliberate — it removes the tedious accusation rounds of normal social deduction. The hidden information isn't *who is the traitor*, it's **who has been bought**.
+Teams are **public from tick zero**. This is deliberate - it removes the tedious accusation rounds of normal social deduction. The hidden information isn't *who is the traitor*, it's **who has been bought**.
 
 ### The tick
 
@@ -104,7 +104,7 @@ DELIBERATE  →  SETTLE  →  BRIEF  →  MOVE
  parallel      x402      2 lines   until next tick
 ```
 
-Humans move smoothly *inside* a tick. Advisors act only at the **boundary**, all at once — which is what makes betrayal legible to an audience instead of a blur.
+Humans move smoothly *inside* a tick. Advisors act only at the **boundary**, all at once - which is what makes betrayal legible to an audience instead of a blur.
 
 ### The central tension
 
@@ -116,7 +116,7 @@ Humans move smoothly *inside* a tick. Advisors act only at the **boundary**, all
 
 ## ⛓️ Deployed on Monad testnet
 
-All four contracts are live. Every link below was **verified in a browser** — status `Success`, real bytecode, real token transfers.
+All four contracts are live. Every link below was **verified in a browser** - status `Success`, real bytecode, real token transfers.
 
 ### Contracts
 
@@ -131,10 +131,10 @@ All four contracts are live. Every link below was **verified in a browser** — 
 
 | What it proves | Transaction |
 |---|---|
-| 💸 **Contact fee over x402** — advisor pays advisor 0.25 KHIA, signed but never broadcast by the payer | [`0x4f1769d5…c975`](https://testnet.monadscan.com/tx/0x4f1769d5e58111bbbc1b2739bfc38dc1fc37e55eeab51629f72125e3bce2c975) |
-| 🔥 **Powerup burn** — supply fell 39 → 38 KHIA, genuinely destroyed | [`0xf5735042…eef7`](https://testnet.monadscan.com/tx/0xf573504278e2f112e026b76c1b53a86436f59cbe19c4cba842c4655d73b3eef7) |
-| 🤝 **Escrow release** — bribe held in custody, paid only on engine attestation | [`0xdcd6f9aa…b420`](https://testnet.monadscan.com/tx/0xdcd6f9aa86df0c235dcc3a4525f6e3a213daef757fe01cf0bec7c8e9721cb420) |
-| ✍️ **EIP-3009** — a third party submitted a transfer the holder only *signed* | [`0x9d5ca3d9…a741`](https://testnet.monadscan.com/tx/0x9d5ca3d9a84a7ebbfaccf65d4dc55f7e40956ec6c860743d5e2563c79e3ea741) |
+| 💸 **Contact fee over x402** - advisor pays advisor 0.25 KHIA, signed but never broadcast by the payer | [`0x4f1769d5…c975`](https://testnet.monadscan.com/tx/0x4f1769d5e58111bbbc1b2739bfc38dc1fc37e55eeab51629f72125e3bce2c975) |
+| 🔥 **Powerup burn** - supply fell 39 → 38 KHIA, genuinely destroyed | [`0xf5735042…eef7`](https://testnet.monadscan.com/tx/0xf573504278e2f112e026b76c1b53a86436f59cbe19c4cba842c4655d73b3eef7) |
+| 🤝 **Escrow release** - bribe held in custody, paid only on engine attestation | [`0xdcd6f9aa…b420`](https://testnet.monadscan.com/tx/0xdcd6f9aa86df0c235dcc3a4525f6e3a213daef757fe01cf0bec7c8e9721cb420) |
+| ✍️ **EIP-3009** - a third party submitted a transfer the holder only *signed* | [`0x9d5ca3d9…a741`](https://testnet.monadscan.com/tx/0x9d5ca3d9a84a7ebbfaccf65d4dc55f7e40956ec6c860743d5e2563c79e3ea741) |
 
 Engine wallet: [`0x2db80CD0…2ed73`](https://testnet.monadscan.com/address/0x2db80CD0c660FfDB701B0980362A9E118902ed73)
 
@@ -166,7 +166,7 @@ Three paid resources: `/x402/contact` · `/x402/powerup` · `/x402/bribe`
 
 <br>
 
-**x402 cannot move native MON.** The `exact` scheme settles through EIP-3009 `transferWithAuthorization` — an ERC-20 method. Native tokens have no such entry point. Verified against the live facilitator:
+**x402 cannot move native MON.** The `exact` scheme settles through EIP-3009 `transferWithAuthorization` - an ERC-20 method. Native tokens have no such entry point. Verified against the live facilitator:
 
 ```bash
 POST /verify  { asset: "0x000...000" }
@@ -185,11 +185,11 @@ It also removed a hard blocker: the public faucet drips a few MON per address pe
 
 <br>
 
-**Reserve balance.** A transaction reverts if the sender's ending balance drops below `min(starting_balance, 10 MON)`. Advisors hold 5 credits, so every payment would revert — except via the "emptying transaction" exception, which requires no other tx from that account in the previous 3 blocks (~1.2s). `economy/wallets.js` serialises each advisor to one send per 1.5s. Free at a 15s tick, fatal if removed.
+**Reserve balance.** A transaction reverts if the sender's ending balance drops below `min(starting_balance, 10 MON)`. Advisors hold 5 credits, so every payment would revert - except via the "emptying transaction" exception, which requires no other tx from that account in the previous 3 blocks (~1.2s). `economy/wallets.js` serialises each advisor to one send per 1.5s. Free at a 15s tick, fatal if removed.
 
 **Gas is billed on `gas_limit`, not gas used.** Unlike Ethereum, an inflated estimate is a real cost. Native transfers are hardcoded to 21,000; contract estimates get a 10% buffer and no more.
 
-**Cancun/MCOPY.** OpenZeppelin 5.6 compiles to `MCOPY` (EIP-5656), which needs the Cancun EVM target. We proved Monad executes it on testnet rather than assuming — a wrong guess there deploys cleanly and fails at runtime.
+**Cancun/MCOPY.** OpenZeppelin 5.6 compiles to `MCOPY` (EIP-5656), which needs the Cancun EVM target. We proved Monad executes it on testnet rather than assuming - a wrong guess there deploys cleanly and fails at runtime.
 
 **Sub-second finality is why the 15s tick works.** On a slower chain the tick stretches to 40s to fit settlement, and the game stops being a game.
 </details>
@@ -206,7 +206,7 @@ It also removed a hard blocker: the public faucet drips a few MON per address pe
 | Mouse | Look (click the view for pointer lock) |
 | Touch | Drag to look, on-screen pad to move |
 
-Your advisor **speaks its briefing aloud** through the browser's speech synthesis. You are looking at a wall — the instruction has to reach you through your ears.
+Your advisor **speaks its briefing aloud** through the browser's speech synthesis. You are looking at a wall - the instruction has to reach you through your ears.
 
 **Sound cues** are synthesised, not sampled (no audio files ship): tick, footstep, wall bump, bribe settling, task complete, elimination, extraction opening.
 
@@ -216,8 +216,8 @@ Your advisor **speaks its briefing aloud** through the browser's speech synthesi
 
 Powered by **Groq** (`llama-3.3-70b-versatile`, ~1.9s latency). Each advisor carries two weighted goals:
 
-- **Survive** — my human lives to the end
-- **Enrich** — maximise my credit balance
+- **Survive** - my human lives to the end
+- **Enrich** - maximise my credit balance
 
 The human sets that weight before the game and **it is public**. Everyone can see how corruptible your advisor is. Nobody can see whether it has actually been bought.
 
@@ -243,7 +243,7 @@ contracts/    KhianaCredit · KhianaEscrow · PowerupShop · RoleCommit
 
 **Fog of war is computed server-side and never sent to the client.** If the full state were shipped and hidden in the renderer, anyone could open devtools and win. `server/src/game/fog.js` is the boundary, and there is a test asserting that a player packet never contains the advisor channel or the ledger.
 
-Visibility is two-part: a tight radius bubble around you, plus rays that carry ~7 tiles straight down an open corridor and stop dead at the first wall. A plain radius is wrong in both directions at once — too generous sideways, far too mean down a long hallway.
+Visibility is two-part: a tight radius bubble around you, plus rays that carry ~7 tiles straight down an open corridor and stop dead at the first wall. A plain radius is wrong in both directions at once - too generous sideways, far too mean down a long hallway.
 </details>
 
 ---
@@ -267,11 +267,11 @@ khiana.bat test       # or ./khiana.sh test
 
 <br>
 
-- **The 3D maze rendered nothing.** `renderer.info` proved 6 draw calls and 29,208 triangles every frame — the scene fog was hardcoded to `Fog(ink, 14, 30)` while the camera sat ~33.6 units back, so the entire world was past the far plane.
-- **`REVEAL` (1.00) granted nothing** — every advisor already had every position for free, which also meant `GHOST` hid nobody and the documented conflict could never fire.
-- **`LANTERN` (0.75) cancelled `BLACKOUT` (2.00)** back to normal vision — the cheap powerup beating the expensive one, the exact inverse of the rule.
+- **The 3D maze rendered nothing.** `renderer.info` proved 6 draw calls and 29,208 triangles every frame - the scene fog was hardcoded to `Fog(ink, 14, 30)` while the camera sat ~33.6 units back, so the entire world was past the far plane.
+- **`REVEAL` (1.00) granted nothing** - every advisor already had every position for free, which also meant `GHOST` hid nobody and the documented conflict could never fire.
+- **`LANTERN` (0.75) cancelled `BLACKOUT` (2.00)** back to normal vision - the cheap powerup beating the expensive one, the exact inverse of the rule.
 - **Explorer links rendered for *mock* tx hashes**, which are well-formed and indistinguishable from real ones. The server now declares chain mode.
-- **Seat assignment was deterministic** — always `p1`, so the same server always gave you the same team.
+- **Seat assignment was deterministic** - always `p1`, so the same server always gave you the same team.
 </details>
 
 ---
@@ -279,7 +279,7 @@ khiana.bat test       # or ./khiana.sh test
 ## ⚠️ Honest caveats
 
 - **Testnet only.** Valueless tokens by design. Framed as retainers and commissions, not gambling.
-- **The engine is a trusted attestor.** Monad guarantees a payment can't be reneged on, reordered or erased. It does *not* independently verify that a human reached a tile — the game engine asserts that. Real centralisation, named rather than hidden.
+- **The engine is a trusted attestor.** Monad guarantees a payment can't be reneged on, reordered or erased. It does *not* independently verify that a human reached a tile - the game engine asserts that. Real centralisation, named rather than hidden.
 - **The x402 resource server is hand-rolled**, not the official `@x402/next` middleware. It's fully tested, but it is ours.
 - **The `upto` scheme is unused.** Variable-amount payments would fit bribe negotiation better than `exact`, but it's Permit2-only and that's real work.
 
