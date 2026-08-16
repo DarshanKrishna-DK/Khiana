@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>BLINDSIDE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ── Design tokens ────────────────────────────────────────────────────
+     Palette is drawn from the subject: a dark maze lit badly, money moving
+     in the gaps. Ink and slate for the unlit world, bone for what you can
+     actually see, amber for money, rust for the people who want you dead,
+     violet for the channel you're not allowed to read.                    */
+  :root {
+    --ink:      #0B0E14;
+    --panel:    #131823;
+    --fog:      #1C2230;
+    --edge:     #2A3244;
+    --bone:     #E8E3D9;
+    --muted:    #7A8499;
+    --amber:    #E5A93C;
+    --rust:     #C2503A;
+    --violet:   #7B6CD9;
+    --teal:     #5FA8A0;
+
+    --mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --display: 'Archivo', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ink); }
+  body { font-family: var(--mono); color: var(--bone); }
+
+  #stage { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  /* ── Vignette: the world literally closes in on you ─────────────────── */
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at center,
+      transparent 30%, rgba(11,14,20,.55) 65%, rgba(11,14,20,.92) 100%);
+  }
+
+  /* ── HUD ────────────────────────────────────────────────────────────── */
+  .hud { position: fixed; pointer-events: none; }
+
+  #topbar {
+    top: 0; left: 0; right: 0;
+    display: flex; align-items: center; gap: 20px;
+    padding: 14px 20px;
+    background: linear-gradient(180deg, rgba(11,14,20,.95), transparent);
+  }
+  #mark {
+    font-family: var(--display); font-weight: 800; font-size: 15px;
+    letter-spacing: .22em; color: var(--bone);
+  }
+  #mark span { color: var(--rust); }
+
+  .stat { font-size: 11px; letter-spacing: .08em; color: var(--muted); }
+  .stat b { display: block; font-size: 17px; color: var(--bone); font-weight: 600; letter-spacing: 0; }
+  .stat.amber b { color: var(--amber); }
+  /* Sealed exit stays quiet; a live one has to catch the eye mid-panic. */
+  #exitstat b { font-size: 13px; opacity: .55; }
+  #exitstat.live b { color: var(--amber); opacity: 1; animation: exitpulse 1.6s ease-in-out infinite; }
+  @keyframes exitpulse { 0%, 100% { opacity: 1 } 50% { opacity: .45 } }
+  @media (prefers-reduced-motion: reduce) { #exitstat.live b { animation: none } }
+  #role b { font-family: var(--display); letter-spacing: .1em; }
+  #role.saboteur b { color: var(--rust); }
+  #role.loyalist b { color: var(--teal); }
+
+  /* Tick meter — the only continuously moving thing on screen, so it reads
+     as pressure without needing a label. */
+  #tickbar {
+    position: fixed; top: 0; left: 0; height: 2px;
+    background: var(--amber); width: 0%;
+    transition: width .3s linear;
+  }
+
+  /* ── The briefing panel. This is the emotional centre of the player's
+     screen: the only voice they have, and they cannot verify a word. ──── */
+  #briefing {
+    bottom: 0; left: 0; right: 0;
+    padding: 22px 20px 26px;
+    background: linear-gradient(0deg, rgba(11,14,20,.97) 60%, transparent);
+  }
+  #briefing .who {
+    font-size: 10px; letter-spacing: .2em; color: var(--violet);
+    margin-bottom: 8px; text-transform: uppercase;
+  }
+  #briefing .text {
+    font-size: 17px; line-height: 1.45; max-width: 620px;
+    color: var(--bone); min-height: 48px;
+  }
+  #briefing .text.empty { color: var(--muted); font-style: italic; }
+
+  /* ── Roster: teams are PUBLIC in this game. What's hidden is who's bought. */
+  #roster {
+    top: 68px; right: 20px; width: 178px;
+    font-size: 11px; line-height: 1.9;
+  }
+  #roster .r { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); }
+  #roster .r.dead { opacity: .3; text-decoration: line-through; }
+  #roster .r .n { color: var(--bone); }
+  #roster .r.sab .n { color: var(--rust); }
+  #roster .r .w { color: var(--amber); font-variant-numeric: tabular-nums; }
+  #roster .hd {
+    font-size: 9px; letter-spacing: .18em; color: var(--muted);
+    text-transform: uppercase; margin-bottom: 6px; border-bottom: 1px solid var(--edge);
+    padding-bottom: 5px;
+  }
+  #roster .lg { font-size: 9px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+
+  /* ── Mobile dpad ────────────────────────────────────────────────────── */
+  #dpad {
+    display: none; bottom: 120px; right: 22px;
+    pointer-events: auto;
+    grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 52px);
+  }
+  #dpad button {
+    background: rgba(28,34,48,.85); border: 1px solid var(--edge);
+    color: var(--bone); font-size: 18px; font-family: var(--mono);
+    border-radius: 4px; cursor: pointer;
+  }
+  #dpad button:active { background: var(--amber); color: var(--ink); }
+  #dpad button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  @media (hover: none) and (pointer: coarse) { #dpad { display: grid; } }
+
+  /* ── Join gate ──────────────────────────────────────────────────────── */
+  #gate {
+    position: fixed; inset: 0; background: var(--ink);
+    display: grid; place-items: center; z-index: 50;
+  }
+  #gate .box { width: min(400px, 88vw); text-align: left; }
+  #gate h1 {
+    font-family: var(--display); font-weight: 800; font-size: 34px;
+    letter-spacing: .16em; margin: 0 0 6px;
+  }
+  #gate h1 span { color: var(--rust); }
+  #gate .tag { color: var(--muted); font-size: 13px; line-height: 1.6; margin-bottom: 28px; }
+  #gate label {
+    display: block; font-size: 10px; letter-spacing: .16em;
+    color: var(--muted); text-transform: uppercase; margin-bottom: 7px;
+  }
+  #gate input[type=text] {
+    width: 100%; padding: 11px 13px; margin-bottom: 20px;
+    background: var(--panel); border: 1px solid var(--edge);
+    color: var(--bone); font-family: var(--mono); font-size: 14px; border-radius: 3px;
+  }
+  #gate input[type=range] { width: 100%; accent-color: var(--amber); margin-bottom: 6px; }
+  #gate .wv { font-size: 12px; color: var(--amber); margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+  #gate .wd { font-size: 11px; color: var(--muted); line-height: 1.5; margin-bottom: 26px; min-height: 32px; }
+  #gate button {
+    width: 100%; padding: 13px; background: var(--amber); color: var(--ink);
+    border: 0; border-radius: 3px; font-family: var(--display); font-weight: 800;
+    letter-spacing: .14em; font-size: 13px; cursor: pointer;
+  }
+  #gate button:hover { background: var(--bone); }
+  #gate button:focus-visible { outline: 2px solid var(--bone); outline-offset: 3px; }
+  input:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div id="stage"></div>
+  <div id="vignette"></div>
+  <div id="tickbar"></div>
+
+  <div class="hud" id="topbar">
+    <div id="mark">BLIND<span>SIDE</span></div>
+    <div class="stat" id="role">YOU ARE<b>—</b></div>
+    <div class="stat" id="tickstat">TICK<b>0/40</b></div>
+    <div class="stat amber" id="taskstat">TASKS<b>0/5</b></div>
+    <div class="stat" id="exitstat" hidden>EXIT<b>sealed</b></div>
+  </div>
+
+  <div class="hud" id="roster">
+    <div class="hd">Roster · loyalty</div>
+    <div id="rosterlist"></div>
+    <div class="lg">Loyalty is public. Whether they've been paid is not.</div>
+  </div>
+
+  <div class="hud" id="briefing">
+    <div class="who">Your advisor</div>
+    <div class="text empty" id="brieftext">Waiting for the first briefing…</div>
+  </div>
+
+  <div class="hud" id="dpad">
+    <span></span><button data-dx="0" data-dy="-1" aria-label="Move north">↑</button><span></span>
+    <button data-dx="-1" data-dy="0" aria-label="Move west">←</button><span></span><button data-dx="1" data-dy="0" aria-label="Move east">→</button>
+    <span></span><button data-dx="0" data-dy="1" aria-label="Move south">↓</button><span></span>
+  </div>
+
+  <div id="gate">
+    <div class="box">
+      <h1>BLIND<span>SIDE</span></h1>
+      <p class="tag">
+        You can see three tiles. Your advisor can see everything.<br>
+        It may have been paid to lie to you.
+      </p>
+      <label for="name">Your name</label>
+      <input type="text" id="name" maxlength="14" placeholder="Enter a name" />
+      <label for="weight">Advisor retainer</label>
+      <input type="range" id="weight" min="20" max="95" value="70" step="5" />
+      <div class="wv" id="wv">70 / 100</div>
+      <div class="wd" id="wd"></div>
+      <button id="join">Enter the maze</button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
