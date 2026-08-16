@@ -8,6 +8,23 @@
  */
 
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8787';
+
+/**
+ * Every API call goes through this.
+ *
+ * ngrok's free tier answers browser-shaped requests with an interstitial
+ * warning page (ERR_NGROK_6024) instead of the API response, which makes every
+ * fetch fail with a JSON parse error and looks exactly like the server being
+ * down. The documented escape is this header. It is inert against any other
+ * host, so it costs nothing to send always rather than sniffing the URL.
+ */
+function api(path, init = {}) {
+  return fetch(`${API}${path}`, {
+    ...init,
+    headers: { 'ngrok-skip-browser-warning': '1', ...(init.headers ?? {}) },
+  });
+}
+
 const SPECTATOR = import.meta.env.VITE_SPECTATOR_URL ?? 'http://localhost:5174';
 
 import { mountMazeBackground } from './maze-bg.js';
@@ -22,7 +39,7 @@ const err = msg => { el('err').textContent = msg ?? ''; };
 
 async function loadConfig() {
   try {
-    const c = await fetch(`${API}/config`).then(r => r.json());
+    const c = await api('/config').then(r => r.json());
 
     const set = (id, v) => { const n = el(id); if (n) n.textContent = v; };
     set('cfg-tasks', c.tasksToWin);
@@ -80,7 +97,7 @@ async function loadLobbies({ showSkeleton = false } = {}) {
   if (showSkeleton) list.innerHTML = '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
 
   try {
-    const { rooms } = await fetch(`${API}/rooms`).then(r => r.json());
+    const { rooms } = await api('/rooms').then(r => r.json());
 
     if (!rooms?.length) {
       list.innerHTML = `<div class="state">No tables open right now. Start one below and it appears here for everyone.</div>`;
@@ -103,7 +120,7 @@ el('create').addEventListener('click', async () => {
   btn.disabled = true;
   btn.textContent = 'Opening…';
   try {
-    const res = await fetch(`${API}/rooms`, {
+    const res = await api('/rooms', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, isPublic: true }),

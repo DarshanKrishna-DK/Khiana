@@ -1,5 +1,22 @@
 const WS_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8787';
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8787';
+
+/**
+ * Every API call goes through this.
+ *
+ * ngrok's free tier answers browser-shaped requests with an interstitial
+ * warning page (ERR_NGROK_6024) instead of the API response, which makes every
+ * fetch fail with a JSON parse error and looks exactly like the server being
+ * down. The documented escape is this header. It is inert against any other
+ * host, so it costs nothing to send always rather than sniffing the URL.
+ */
+function api(path, init = {}) {
+  return fetch(`${API}${path}`, {
+    ...init,
+    headers: { 'ngrok-skip-browser-warning': '1', ...(init.headers ?? {}) },
+  });
+}
+
 // Monad testnet explorer. Env-overridable so a mainnet or alternate-explorer
 // deployment needs no code change.
 const EXPLORER = import.meta.env.VITE_EXPLORER ?? 'https://testnet.monadscan.com';
@@ -42,18 +59,21 @@ addEventListener('resize', fit);
 fit();
 
 // ── Network ─────────────────────────────────────────────────────────────────
-const ws = new WebSocket(WS_URL);
 /**
  * Which table to watch. Without ?room=CODE this follows the default table,
  * which is wrong the moment anyone opens their own lobby: the audience sits
- * watching an idle board while the actual game runs somewhere else.
+ * watching an idle board while the real game runs somewhere else.
+ *
+ * The room has to travel on the SOCKET URL, not in the SPECTATE message. The
+ * server resolves it once in wss.on('connection') from the query string and
+ * binds the socket to that room before any message is read, so a room in the
+ * message body is simply ignored.
  */
 const ROOM = new URLSearchParams(location.search).get('room') || null;
 
-ws.onopen = () => ws.send(JSON.stringify({
-  type: 'SPECTATE',
-  room: ROOM ?? undefined,
-}));
+const ws = new WebSocket(ROOM ? `${WS_URL}?room=${encodeURIComponent(ROOM)}` : WS_URL);
+
+ws.onopen = () => ws.send(JSON.stringify({ type: 'SPECTATE' }));
 ws.onmessage = ev => {
   const msg = JSON.parse(ev.data);
   if (msg.type !== 'SPECTATE_STATE' || !msg.view) return;
@@ -283,7 +303,7 @@ function esc(s) {
 
 // ── Reveal ──────────────────────────────────────────────────────────────────
 async function showReveal() {
-  const res = await fetch(`${API}/game/reveal`).then(r => r.json()).catch(() => null);
+  const res = await api('/game/reveal').then(r => r.json()).catch(() => null);
   if (!res) return;
 
   el('rvwin').textContent = `${res.winner} WIN`;
@@ -307,6 +327,21 @@ async function showReveal() {
   renderRoleCommit(res.roleCommit);
   el('reveal').classList.add('on');
 }
+
+/**
+ * Let the audience back to the board after a game ends.
+ *
+ * The reveal is a full-screen z-100 overlay, and it used to be terminal: once a
+ * round finished there was no way to see the maze again short of a reload, and
+ * a reload just re-fetched the same finished game and put the overlay straight
+ * back. Anyone arriving after the final tick concluded the spectator map was
+ * broken, because what they saw was a scoreboard with no way past it.
+ */
+function closeReveal() {
+  el('reveal').classList.remove('on');
+}
+el('rvclose')?.addEventListener('click', closeReveal);
+addEventListener('keydown', e => { if (e.key === 'Escape') closeReveal(); });
 
 /**
  * The commit-reveal proof (PRD §10.4).

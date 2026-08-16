@@ -111,17 +111,20 @@
     top: 68px; right: 20px; width: 178px;
     font-size: 11px; line-height: 1.9;
   }
-  #roster .r { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); }
+  /* The roster floats over the 3D corridor, not over a page surface, so it
+     carries explicit light colours instead of inheriting the light-theme
+     tokens. Those tokens are near-black and vanished against the maze. */
+  #roster .r { display: flex; justify-content: space-between; gap: 8px; color: #C9C2E8; }
   #roster .r.dead { opacity: .3; text-decoration: line-through; }
-  #roster .r .n { color: var(--bone); }
-  #roster .r.sab .n { color: var(--rust); }
-  #roster .r .w { color: var(--amber); font-variant-numeric: tabular-nums; }
+  #roster .r .n { color: #FFFFFF; }
+  #roster .r.sab .n { color: #FF8EE4; }
+  #roster .r .w { color: #85E6FF; font-variant-numeric: tabular-nums; }
   #roster .hd {
-    font-size: 9px; letter-spacing: .18em; color: var(--muted);
-    text-transform: uppercase; margin-bottom: 6px; border-bottom: 1px solid var(--edge);
+    font-size: 9px; letter-spacing: .18em; color: #FFFFFF;
+    text-transform: uppercase; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,.28);
     padding-bottom: 5px;
   }
-  #roster .lg { font-size: 9px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+  #roster .lg { font-size: 9px; color: #C9C2E8; margin-top: 6px; line-height: 1.5; }
 
   /* ── Mobile dpad ────────────────────────────────────────────────────── */
   #dpad {
@@ -194,8 +197,8 @@
   #objective {
     position:fixed; top:64px; left:50%; transform:translateX(-50%); z-index:20;
     padding:7px 16px; border-radius:999px;
-    background:rgba(255,255,255,.94); border:1px solid var(--edge);
-    font-size:12px; color:var(--bone); letter-spacing:.01em;
+    background:rgba(14,9,28,.92); border:1px solid rgba(255,255,255,.25);
+    font-size:12px; color:#F2EFFC; letter-spacing:.01em;
     max-width:min(92vw,640px); text-align:center;
     backdrop-filter:blur(8px);
   }

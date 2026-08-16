@@ -26,6 +26,18 @@
 
 ---
 
+## The two screens
+
+<img src="assets/Game_Human_view.png" alt="Player view: a dark first-person corridor, roster with no team colours, and the advisor's instruction along the bottom" width="100%" />
+
+**What a player sees.** One torch-lit corridor, a roster that shows loyalty numbers but never who the saboteurs are, and an advisor telling them exactly where to walk.
+
+<img src="assets/Spectator_View.png" alt="Spectator view: the full maze with every player named, and the advisor channel showing a 1 KHIA bribe" width="100%" />
+
+**What the audience sees.** The whole maze, every player named and colour-coded by team, and the advisor channel on the right. In this frame p2 is paying p7 1 KHIA with the words "A little cooperation now, might save us later", one of 16 betrayals that round.
+
+---
+
 ## Contracts
 
 All four are live on **Monad testnet (chain 10143)**.
