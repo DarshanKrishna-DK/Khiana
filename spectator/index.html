@@ -10,15 +10,15 @@
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<meta name="theme-color" content="#0E091C">
+<meta name="theme-color" content="#EEF3FC">
 <style>
   :root {
     /* Monad brand palette (monad.xyz/brand-and-media-kit), identical to the
        landing page and the game so all three read as one product. */
-    --ink:#0E091C; --panel:#150E2B; --fog:#1E1440; --edge:#2C1F5C;
-    --purple:#6E54FF; --lavender:#DDD7FE; --cyan:#85E6FF;
-    --pink:#FF8EE4; --orange:#FFAE45;
-    --bone:var(--lavender); --muted:#8778BE;
+    --ink:#EEF3FC; --panel:#FFFFFF; --fog:#DFE9FB; --edge:#B9CCEC;
+    --purple:#6B4EF0; --lavender:#1C1938; --cyan:#1A5F99;
+    --pink:#C2185B; --orange:#B26A00;
+    --bone:var(--lavender); --muted:#5D5A7A;
     --amber:var(--cyan); --rust:var(--pink); --violet:var(--purple); --teal:var(--cyan);
     --mono:'Roboto Mono',ui-monospace,monospace;
     --display:'Pirata One',system-ui,serif;
@@ -37,7 +37,7 @@
   #hdr {
     position:absolute; top:0; left:0; right:0; z-index:5;
     display:flex; align-items:center; gap:26px; padding:16px 22px;
-    background:linear-gradient(180deg,rgba(14,9,28,.96),transparent);
+    background:linear-gradient(180deg,rgba(238,243,252,.96),transparent);
   }
   #mark { font-family:var(--display); font-weight:400; font-size:16px; letter-spacing:.22em; }
   #mark span { color:var(--rust); }
@@ -59,7 +59,7 @@
   #treasuries {
     position:absolute; bottom:0; left:0; right:0; z-index:5;
     display:flex; gap:2px; padding:16px 22px 18px;
-    background:linear-gradient(0deg,rgba(14,9,28,.96),transparent);
+    background:linear-gradient(0deg,rgba(238,243,252,.96),transparent);
   }
   .tr { flex:1; }
   .tr .nm { font-size:10px; color:var(--muted); margin-bottom:5px;
@@ -93,7 +93,7 @@
 
   .msg.bribe .body { color:var(--amber); }
   .msg.bribe { border-left:2px solid var(--amber); padding-left:9px; }
-  .msg.settled { border-left:2px solid var(--amber); padding-left:9px; background:rgba(133,230,255,.08); padding:7px 9px; border-radius:0 3px 3px 0; }
+  .msg.settled { border-left:2px solid var(--amber); padding-left:9px; background:rgba(26,95,153,.09); padding:7px 9px; border-radius:0 3px 3px 0; }
   .msg.settled .body { color:var(--amber); font-weight:500; }
   .msg.kill { border-left:2px solid var(--rust); padding-left:9px; }
   .msg.kill .body { color:var(--rust); }
@@ -105,7 +105,7 @@
      Everything else on this screen is quiet so this can be loud.        ── */
   .msg.corrupt {
     border-left:2px solid var(--violet); padding:9px 11px;
-    background:rgba(110,84,255,.14); border-radius:0 3px 3px 0;
+    background:rgba(107,78,240,.13); border-radius:0 3px 3px 0;
   }
   .msg.corrupt .meta { color:var(--violet); }
   .msg.corrupt .body { color:var(--bone); }
@@ -135,7 +135,7 @@
 
   /* ── Reveal overlay ──────────────────────────────────────────────────── */
   #reveal {
-    position:fixed; inset:0; background:rgba(14,9,28,.985); z-index:100;
+    position:fixed; inset:0; background:rgba(238,243,252,.985); z-index:100;
     display:none; overflow-y:auto; padding:44px;
   }
   #reveal.on { display:block; }

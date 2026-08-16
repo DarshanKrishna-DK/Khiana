@@ -119,19 +119,76 @@ export function computeVisible(maze, player, effects) {
  * Build the state packet for ONE human player. Everything they must not know
  * is stripped here, not in the client.
  */
+/**
+ * What a Saboteur needs to know about the kill they are (or are not) making.
+ *
+ * Elimination is automatic: stand next to a Loyalist for ELIMINATION_TICKS with
+ * no witness and they die. There is no button, deliberately, because the whole
+ * premise is that a bought advisor kills you by ROUTING you rather than by
+ * anyone hitting a key. But automatic and invisible are different things: with
+ * no readout a saboteur standing on a victim cannot tell whether the mechanic
+ * is broken, whether a witness is blocking them, or whether to hold position.
+ *
+ * Mirrors the rules in resolveEliminations exactly. If that changes, change
+ * this, or the HUD starts lying about a kill that will not land.
+ *
+ * Returns null for Loyalists - they must never learn they are being stalked.
+ */
+function stalkStateFor(state, me) {
+  if (me.team !== TEAM.SABOTEUR || !me.alive) return null;
+
+  const loys = Object.values(state.players).filter(p => p.alive && p.team === TEAM.LOYALIST);
+  const target = loys.find(l => distance(me.pos, l.pos) <= 1);
+  if (!target) return { adjacent: false };
+
+  const witness = loys.find(w =>
+    w.id !== target.id &&
+    computeVisible(state.maze, w, state.effects).has(`${target.pos.x},${target.pos.y}`)
+  );
+
+  const held = me.adjacentSince == null ? 0 : state.tick - me.adjacentSince;
+  return {
+    adjacent: true,
+    target: { id: target.id, name: target.name },
+    witnessed: Boolean(witness),
+    witness: witness ? witness.name : null,
+    ticksHeld: held,
+    ticksNeeded: CONFIG.GAME.ELIMINATION_TICKS,
+  };
+}
+
 export function playerView(state, playerId) {
   const me = state.players[playerId];
   if (!me) return null;
 
   const visible = computeVisible(state.maze, me, state.effects);
 
-  // Other players are only included if visible — and Ghost hides you from
-  // the opposing team specifically.
+  /**
+   * Teams are HIDDEN from players.
+   *
+   * They used to be public, which meant a Loyalist who saw a red silhouette
+   * simply walked the other way and the saboteur could never close the
+   * distance. Elimination needs a full tick of adjacency, so a visible killer
+   * is a harmless one, and the corruption economy collapses with it: nobody
+   * pays to misdirect a player who can already see the threat.
+   *
+   * The rule is: you always know your own team, and saboteurs know each other
+   * because they have to coordinate. Everyone else reads as `null`, and the
+   * client has no team to colour by. Concealment happens HERE, on the server.
+   * Sending the real team and hiding it in CSS would leave it in the socket
+   * frame for anyone with devtools open.
+   */
+  const knowsTeamOf = p =>
+    p.id === playerId || (me.team === TEAM.SABOTEUR && p.team === TEAM.SABOTEUR);
+
   const others = Object.values(state.players)
     .filter(p => p.id !== playerId && p.alive)
     .filter(p => visible.has(`${p.pos.x},${p.pos.y}`))
     .filter(p => !(state.effects.ghost?.has(p.id) && p.team !== me.team))
-    .map(p => ({ id: p.id, name: p.name, team: p.team, pos: p.pos }));
+    .map(p => ({
+      id: p.id, name: p.name, pos: p.pos,
+      team: knowsTeamOf(p) ? p.team : null,
+    }));
 
   const decoys = (state.effects.decoys ?? [])
     .filter(d => d.hiddenFrom !== me.team && visible.has(`${d.pos.x},${d.pos.y}`))
@@ -150,6 +207,9 @@ export function playerView(state, playerId) {
       frozen: state.effects.freeze?.has(me.id) ?? false,
       sprinting: state.effects.sprint?.has(me.id) ?? false,
     },
+    // Saboteurs only. Null for everyone else, so a Loyalist's client never
+    // holds the information that someone is standing on them.
+    stalk: stalkStateFor(state, me),
     visible: [...visible],
     others: [...others, ...decoys],
     // The extraction point is public, like the maze layout — it's a marked
@@ -158,9 +218,12 @@ export function playerView(state, playerId) {
     exit: state.exit ?? null,
     exitOpen: state.tasksComplete >= CONFIG.GAME.TASKS_TO_WIN,
     survivorsToEscape: CONFIG.GAME.SURVIVORS_TO_ESCAPE,
-    // Teams are PUBLIC in this game — that's the design. Hidden info is who's bribed.
+    // Same concealment as `others`. Deaths stay public (you can see a body),
+    // and the advisor's retainer stays public because that is the one thing
+    // the game wants you reasoning about instead of team colour.
     roster: Object.values(state.players).map(p => ({
-      id: p.id, name: p.name, team: p.team, alive: p.alive,
+      id: p.id, name: p.name, alive: p.alive,
+      team: knowsTeamOf(p) ? p.team : null,
       agentGoal: p.agent.goalWeight,   // public: how corruptible their advisor is
     })),
     tick: state.tick,

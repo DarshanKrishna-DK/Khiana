@@ -13,9 +13,17 @@ const ctx = cv.getContext('2d');
 // Canvas colours are duplicated from the CSS custom properties because a 2D
 // context cannot read them. Keep this block in sync with :root in index.html.
 const C = {
-  ink: '#0E091C', fog: '#1E1440', edge: '#2C1F5C', floor: '#150E2B',
-  bone: '#DDD7FE', muted: '#8778BE', amber: '#85E6FF',
-  rust: '#FF8EE4', violet: '#6E54FF', teal: '#85E6FF',
+  // wall vs floor MUST stay far apart. An earlier pair sat nine points per
+  // channel from each other and read as one flat rectangle. Purple walls on a
+  // white floor is the widest separation available in this palette, which
+  // matters because a spectator screen gets projected in a lit hall.
+  //
+  // teal and rust stay far apart from each other too: on this screen alone,
+  // team colour is public, and telling Loyalist from Saboteur at a glance is
+  // the entire reason the audience is watching.
+  ink: '#EEF3FC', fog: '#6B4EF0', edge: '#B9CCEC', floor: '#FFFFFF',
+  bone: '#1C1938', muted: '#5D5A7A', amber: '#1A5F99',
+  rust: '#C2185B', violet: '#6B4EF0', teal: '#1A5F99',
 };
 
 let state = null;
@@ -78,13 +86,13 @@ function drawBoard() {
   // tasks are done, every remaining decision is about this tile.
   if (state.exit) {
     const ex = ox + state.exit.x * s, ey = oy + state.exit.y * s;
-    ctx.strokeStyle = state.exitOpen ? C.amber : 'rgba(232,227,217,.35)';
+    ctx.strokeStyle = state.exitOpen ? C.amber : 'rgba(93,90,122,.45)';
     ctx.lineWidth = Math.max(1.5, s * 0.2);
     ctx.strokeRect(ex, ey, s, s);
     if (state.exitOpen) {
       // Pulse only when it's live, so "open" reads as an event.
       const pulse = 0.5 + Math.sin(performance.now() * 0.004) * 0.5;
-      ctx.fillStyle = `rgba(133,230,255,${0.15 + pulse * 0.35})`;
+      ctx.fillStyle = `rgba(26,95,153,${0.14 + pulse * 0.30})`;
       ctx.fillRect(ex, ey, s, s);
     }
   }
@@ -102,13 +110,13 @@ function drawBoard() {
     const x = a.x + (b.x - a.x) * t;
     const y = a.y + (b.y - a.y) * t - Math.sin(t * Math.PI) * s * 2.5;
 
-    ctx.strokeStyle = `rgba(133,230,255,${0.35 * (1 - t)})`;
+    ctx.strokeStyle = `rgba(26,95,153,${0.40 * (1 - t)})`;
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
 
     ctx.fillStyle = C.amber;
     ctx.fillRect(x - s * .3, y - s * .2, s * .6, s * .4);
-    ctx.fillStyle = C.ink;
+    ctx.fillStyle = '#FFFFFF';
     ctx.font = `600 ${Math.max(7, s * .3)}px 'Roboto Mono', monospace`;
     ctx.textAlign = 'center';
     ctx.fillText(String(e.amount), x, y + s * .12);
@@ -120,7 +128,7 @@ function drawBoard() {
     const r = s * 0.4;
 
     if (!p.alive) {
-      ctx.strokeStyle = 'rgba(135,120,190,.45)';
+      ctx.strokeStyle = 'rgba(93,90,122,.65)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(c.x - r, c.y - r); ctx.lineTo(c.x + r, c.y + r);
@@ -132,12 +140,30 @@ function drawBoard() {
     // A violet halo marks an agent that has taken money. The audience
     // reads corruption at a glance; the player never will.
     if (p.bribed) {
-      ctx.fillStyle = 'rgba(110,84,255,.30)';
+      ctx.fillStyle = 'rgba(107,78,240,.34)';
       ctx.beginPath(); ctx.arc(c.x, c.y, r * 2.1, 0, Math.PI * 2); ctx.fill();
     }
 
+    // Dark outline first, so a dot sitting on a lit corridor still reads as a
+    // separate object rather than melting into the floor.
     ctx.fillStyle = p.team === 'SABOTEUR' ? C.rust : C.teal;
-    ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+    // Name beside the dot. Eight identical circles tell the audience where
+    // bodies are but not whose, which is useless when the whole story is
+    // "p4 walked p6 into a wall". Drawn with a dark stroke under the fill so
+    // it survives whatever it happens to sit on top of.
+    const label = p.name || p.id;
+    ctx.font = `600 ${Math.max(9, s * 0.62)}px 'Roboto Mono', monospace`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = 'rgba(255,255,255,.92)';
+    ctx.strokeText(label, c.x + r + 3, c.y);
+    ctx.fillStyle = p.team === 'SABOTEUR' ? C.rust : C.teal;
+    ctx.fillText(label, c.x + r + 3, c.y);
   }
 }
 

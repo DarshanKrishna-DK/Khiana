@@ -83,8 +83,11 @@ export class Scene {
     this.yaw = 0;
     this.pitch = 0;
 
-    // Barely-there ambient. Any more and the torch stops mattering.
-    this.scene.add(new THREE.AmbientLight(0x223047, 0.55));
+    // Cold ambient fill, kept low on purpose. This is a torch in a dark maze:
+    // ambient exists only to keep unlit geometry off pure black, never to light
+    // the room. At 2.0 it washed the whole corridor to near-white and the torch
+    // stopped meaning anything, which is the opposite of the intent.
+    this.scene.add(new THREE.AmbientLight(0x223047, 0.85));
 
     /**
      * The torch. A forward cone from the player's head, which is the only
@@ -95,7 +98,14 @@ export class Scene {
      * a corridor where the walls already occlude everything it buys almost no
      * visual information for a large cost on integrated GPUs.
      */
-    this.torch = new THREE.SpotLight(0xFFD9A0, 26, 11, Math.PI / 5, 0.55, 1.6);
+    // decay MUST be 2, and intensity has to be sized for the NEAREST surface,
+    // not the far end of the corridor. three.js r155+ uses physical units, so a
+    // wall receives intensity / distance^decay; corridors are TILE=1 wide, so
+    // the wall you are facing sits about 0.5 away and gets a 4x multiplier
+    // before intensity is even applied. Measured at spawn facing a wall, the
+    // share of pixels brighter than 0.70 luminance was 3.1% at intensity 9 and
+    // 0% at 6. Five leaves margin and keeps the maze genuinely dark.
+    this.torch = new THREE.SpotLight(0xFFD9A0, 5, 9, Math.PI / 5, 0.6, 2);
     this.torch.position.set(0, EYE_H, 0);
     this.torchTarget = new THREE.Object3D();
     this.scene.add(this.torch, this.torchTarget);
@@ -103,7 +113,7 @@ export class Scene {
 
     // A small point light at the head stops the immediate floor from going
     // pure black at your feet, which reads as falling into a hole.
-    this.headLamp = new THREE.PointLight(0xFFC98A, 3.2, 3.4, 2);
+    this.headLamp = new THREE.PointLight(0xFFC98A, 0.65, 3.2, 2);
     this.scene.add(this.headLamp);
 
     this.setupPost();
@@ -142,18 +152,30 @@ export class Scene {
 
     // Half-resolution bloom. At this blur radius the difference is invisible
     // and it costs a quarter of the fill rate.
-    this.bloom = new UnrealBloomPass(half, 0.62, 0.72, 0.62);
+    //
+    // Threshold sits ABOVE the torch's lit-wall response on purpose. At 0.62 it
+    // sat below it, so every lit surface bloomed and the corridor turned into
+    // one soft blob with no readable geometry. Only genuine emissives (the exit
+    // beam, task markers) should bloom.
+    this.bloom = new UnrealBloomPass(half, 0.28, 0.5, 0.92);
     this.composer.addPass(this.bloom);
 
+    // FogExp2 already darkens with distance, which reads as a vignette from
+    // inside a corridor. Stacking a real vignette on top darkened the image
+    // twice and was most of why the maze went unreadable, so this is a light
+    // touch rather than the 1.25 it used to be.
     this.vignette = new ShaderPass(VignetteShader);
-    this.vignette.uniforms.offset.value = 0.92;
-    this.vignette.uniforms.darkness = { value: 1.25 };
+    this.vignette.uniforms.offset.value = 1.1;
+    this.vignette.uniforms.darkness.value = 0.6;
     this.composer.addPass(this.vignette);
 
-    // A weak device gets the plain renderer instead of a slideshow.
+    // Off by default. The scene's lighting was tuned with no post at all, and
+    // that is the look to match; post is an opt-in extra via ?post=1, never a
+    // silent change to how the game reads. A weak device never gets it.
     const weak = /iPhone|iPad|Android/i.test(navigator.userAgent)
       || (navigator.hardwareConcurrency ?? 8) <= 4;
-    this.postEnabled = !weak;
+    this.postEnabled = !weak
+      && new URLSearchParams(location.search).get('post') === '1';
   }
 
   onResize() {
@@ -271,9 +293,14 @@ export class Scene {
       seen.add(p.id);
       let a = this.actors.get(p.id);
       if (!a) {
+        // The server sends team:null for anyone whose allegiance this player
+        // has not earned. Everyone unknown wears the same silhouette, so a
+        // saboteur can walk right up to you and the only thing that gives them
+        // away is behaviour. Only a saboteur ever sees another saboteur marked.
+        const known = p.team === 'SABOTEUR';
         a = makeCharacter(
-          p.decoy ? COLORS.violet : p.team === 'SABOTEUR' ? COLORS.rust : COLORS.teal,
-          { isSaboteur: p.team === 'SABOTEUR', decoy: Boolean(p.decoy) }
+          p.decoy ? COLORS.violet : known ? COLORS.rust : COLORS.teal,
+          { isSaboteur: known, decoy: Boolean(p.decoy) }
         );
         this.actors.set(p.id, a);
         this.scene.add(a);

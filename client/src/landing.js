@@ -32,11 +32,12 @@ async function loadConfig() {
     set('cfg-max', c.maxPowerups);
     set('cfg-fee', c.contactFee);
 
-    // Duplicated once so the marquee can loop seamlessly at -50%.
-    const chips = c.powerups.map(p =>
+    // One copy each. This used to be rendered twice so an auto-scrolling
+    // marquee could loop seamlessly at -50%; the marquee is gone, so a second
+    // copy would just print the whole price list twice.
+    el('powerups').innerHTML = c.powerups.map(p =>
       `<span class="chip"><b>${esc(p.name)}</b><s>${p.cost}</s></span>`
     ).join('');
-    el('powerups').innerHTML = chips + chips;
   } catch {
     // The page is still readable without live numbers; the defaults in the
     // markup are the shipped values.

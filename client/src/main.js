@@ -233,6 +233,45 @@ el('lstart')?.addEventListener('click', () => {
   }, 8000);
 });
 
+/**
+ * The saboteur's kill readout.
+ *
+ * There is no kill key. Elimination fires on its own once you have held a tile
+ * next to a Loyalist for a full tick with nobody watching them, which is what
+ * makes a kill something a bought advisor can ARRANGE by giving directions.
+ * The rule is good; the silence around it was not. Without this panel the
+ * honest reading of walking into a Loyalist and nothing happening is "the game
+ * is broken", so the three states each get said out loud.
+ *
+ * Never rendered for Loyalists: the server sends stalk:null to them, so a
+ * victim's client never even holds the fact that someone is on them.
+ */
+function renderStalk(stalk) {
+  const box = el('stalk');
+  if (!box) return;
+
+  if (!stalk || !stalk.adjacent) { box.hidden = true; return; }
+
+  box.hidden = false;
+  const who = stalk.target?.name ?? 'them';
+
+  if (stalk.witnessed) {
+    // Naming the witness turns a dead end into a plan: break line of sight,
+    // or get the witness moved. That is the interesting decision.
+    box.className = 'blocked';
+    box.innerHTML = `<span class="lead">Cannot strike</span>`
+      + `${escapeHtml(stalk.witness ?? 'Someone')} can see ${escapeHtml(who)}. `
+      + `Break their line of sight, or wait for them to move on.`;
+    return;
+  }
+
+  const held = Math.min(stalk.ticksHeld, stalk.ticksNeeded);
+  box.className = '';
+  box.innerHTML = `<span class="lead">Unwitnessed</span>`
+    + `Holding position beside ${escapeHtml(who)}. Stay adjacent and they go down.`
+    + `<div class="bar"><i style="transform:scaleX(${held / (stalk.ticksNeeded || 1)})"></i></div>`;
+}
+
 function render(view) {
   if (!mazeBuilt && view.maze) { scene.buildMaze(view.maze); mazeBuilt = true; }
   cueAudio(view);
@@ -244,7 +283,7 @@ function render(view) {
 
   el('tickstat').querySelector('b').textContent = `${view.tick}/${view.totalTicks}`;
   el('taskstat').querySelector('b').textContent = `${view.tasksComplete}/${view.tasksToWin}`;
-  el('tickbar').style.width = `${(view.tick / view.totalTicks) * 100}%`;
+  el('tickbar').style.transform = `scaleX(${view.tick / view.totalTicks})`;
 
   // Extraction is the win condition, so it gets a line in the HUD the moment
   // it matters — a player who finishes the tasks and isn't told to run has
@@ -269,6 +308,8 @@ function render(view) {
     obj.textContent = view.objective;
     el('objective').classList.toggle('urgent', /exit|escape|dead/i.test(view.objective));
   }
+
+  renderStalk(view.stalk);
 
   /**
    * Compass needle.
@@ -303,8 +344,10 @@ function render(view) {
     bt.textContent = view.briefing;
   }
 
-  // Teams are public — the roster shows everyone. What it can't show is who's
-  // been bought, which is the whole point of the display.
+  // The roster lists everyone but marks nobody. `team` arrives as null for any
+  // player whose allegiance you have not earned, so the only two numbers on
+  // this panel are the ones you are meant to reason about: who is still alive,
+  // and how corruptible each advisor publicly is.
   el('rosterlist').innerHTML = (view.roster ?? []).map(p => `
     <div class="r ${p.team === 'SABOTEUR' ? 'sab' : ''} ${p.alive ? '' : 'dead'}">
       <span class="n">${escapeHtml(p.name)}</span>

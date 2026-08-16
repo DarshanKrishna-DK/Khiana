@@ -67,7 +67,23 @@ const done = code => {
 };
 
 try {
-  await new Promise(r => setTimeout(r, 3000));
+  // Poll for readiness rather than sleeping a fixed 3s. Boot has to build 9
+  // HD wallets and open an RPC client, which on a cold cache takes longer than
+  // three seconds; the fixed sleep turned that into "TypeError: fetch failed"
+  // with the real server output swallowed in srvOut.
+  await (async () => {
+    for (let i = 0; i < 60; i++) {
+      try {
+        const r = await fetch(`http://localhost:${PORT}/health`);
+        if (r.ok) return;
+      } catch { /* not listening yet */ }
+      if (srv.exitCode !== null) {
+        throw new Error(`server exited with code ${srv.exitCode}:\n${srvOut}`);
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    throw new Error(`server never became ready on :${PORT}\n${srvOut}`);
+  })();
 
   console.log(`\nKhiana — x402 acceptance  ·  ${isMonadTestnet ? 'MONAD TESTNET' : `chain ${CONFIG.CHAIN.CHAIN_ID}`}`);
   console.log(`token ${creditAddress()}\n`);
