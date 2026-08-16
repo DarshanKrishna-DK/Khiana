@@ -43,7 +43,17 @@ fit();
 
 // ── Network ─────────────────────────────────────────────────────────────────
 const ws = new WebSocket(WS_URL);
-ws.onopen = () => ws.send(JSON.stringify({ type: 'SPECTATE' }));
+/**
+ * Which table to watch. Without ?room=CODE this follows the default table,
+ * which is wrong the moment anyone opens their own lobby: the audience sits
+ * watching an idle board while the actual game runs somewhere else.
+ */
+const ROOM = new URLSearchParams(location.search).get('room') || null;
+
+ws.onopen = () => ws.send(JSON.stringify({
+  type: 'SPECTATE',
+  room: ROOM ?? undefined,
+}));
 ws.onmessage = ev => {
   const msg = JSON.parse(ev.data);
   if (msg.type !== 'SPECTATE_STATE' || !msg.view) return;
